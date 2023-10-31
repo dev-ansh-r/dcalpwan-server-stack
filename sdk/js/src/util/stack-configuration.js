@@ -1,0 +1,186 @@
+
+
+import { STACK_COMPONENTS, STACK_COMPONENTS_MAP } from './constants'
+
+class StackConfiguration {
+  constructor(stackConfig) {
+    if (!Boolean(stackConfig)) {
+      throw new Error('Stack configuration must be defined')
+    }
+
+    const unknownComponents = Object.keys(stackConfig).filter(
+      componentName => !STACK_COMPONENTS.includes(componentName),
+    )
+
+    if (unknownComponents.length > 0) {
+      throw new Error(
+        `Cannot instantiate stack configuration with unknown components: ${unknownComponents.join(
+          ',',
+        )}`,
+      )
+    }
+
+    this._stackConfig = stackConfig
+  }
+
+  /**
+   * Selects the url of a stack component.
+   *
+   * @param {*} componentName - The abbreviation of the component, e.g. Is for the Identity Server.
+   * @returns {?string} - The url of the component or `undefined` if the component is not available.
+   */
+  getComponentUrlByName(componentName) {
+    return this._stackConfig[componentName]
+  }
+
+  /**
+   * Selects the hostname of a stack component.
+   *
+   * @param {*} componentName - The abbreviation of the component, e.g. Is for the Identity Server.
+   * @returns {?string} - The hostname of the component address or `undefined` if the component is not available.
+   */
+  getComponentHostByName(componentName) {
+    try {
+      const url = this.getComponentUrlByName(componentName)
+
+      return new URL(url).hostname
+    } catch (error) {
+      // Do not propagate the error, simply return `undefined`.
+      return undefined
+    }
+  }
+
+  /**
+   * Checks whether a stack component is available in the configuration.
+   *
+   * @param {*} componentName - The abbreviation of the component, e.g. Is for
+   * the Identity Server.
+   * @returns {boolean} - `true` if the component is available in the
+   * configuration, `false` otherwise.
+   */
+  isComponentAvailable(componentName) {
+    const componentUrl = this.getComponentUrlByName(componentName)
+
+    return typeof componentUrl === 'string' && componentUrl.length > 0
+  }
+
+  /**
+   * Checks whether a URL shares the same hostname as a stack component.
+   *
+   * @param {string} componentName - The abbreviation of the component, e.g. Is
+   * for the Identity Server.
+   * @param {string} testHost - The hostname to test against.
+   * @returns {boolean} - `true` if the component shares the same host,
+   * `false` otherwise.
+   */
+  isSameHost(componentName, testHost) {
+    const componentUrl = this.getComponentUrlByName(componentName)
+    try {
+      return testHost === new URL(componentUrl).hostname
+    } catch {
+      // Do not propagate the error, simply return `false`.
+      return false
+    }
+  }
+
+  /**
+   * Identity Server hostname getter.
+   *
+   * @returns {?string} - The hostname of the Identity Server of the stack
+   * configuration.
+   */
+  get isHost() {
+    return (
+      this.isComponentAvailable(STACK_COMPONENTS_MAP.is) &&
+      this.getComponentHostByName(STACK_COMPONENTS_MAP.is)
+    )
+  }
+
+  /**
+   * Network Server hostname getter.
+   *
+   * @returns {?string} - The hostname of the Network Server of the stack
+   * configuration.
+   */
+  get nsHost() {
+    return (
+      this.isComponentAvailable(STACK_COMPONENTS_MAP.ns) &&
+      this.getComponentHostByName(STACK_COMPONENTS_MAP.ns)
+    )
+  }
+
+  /**
+   * Application Server hostname getter.
+   *
+   * @returns {?string} - The hostname of the Application Server of the stack
+   * configuration.
+   */
+  get asHost() {
+    return (
+      this.isComponentAvailable(STACK_COMPONENTS_MAP.as) &&
+      this.getComponentHostByName(STACK_COMPONENTS_MAP.as)
+    )
+  }
+
+  /**
+   * Join Server hostname getter.
+   *
+   * @returns {?string} - The hostname of the Join Server of the stack
+   * configuration.
+   */
+  get jsHost() {
+    return (
+      this.isComponentAvailable(STACK_COMPONENTS_MAP.js) &&
+      this.getComponentHostByName(STACK_COMPONENTS_MAP.js)
+    )
+  }
+
+  /**
+   * Gateway Configuration Server hostname getter.
+   *
+   * @returns {?string} - The hostname of the Gateway Configuration Server
+   * of the stack configuration.
+   */
+  get gcsHost() {
+    return (
+      this.isComponentAvailable(STACK_COMPONENTS_MAP.gcs) &&
+      this.getComponentHostByName(STACK_COMPONENTS_MAP.gcs)
+    )
+  }
+
+  /**
+   * Avaible stack components getter.
+   *
+   * @returns {Array<string>} - A list of available component abbreviations,
+   * e.g. [is, as, ns, js].
+   */
+  get availableComponents() {
+    return Object.keys(this._stackConfig)
+  }
+
+  /**
+   * Takes a list of allowed components and only returns components that have
+   * distinct base urls. Used to subscribe to event streaming sources when the
+   * stack uses multiple hosts.
+   *
+   * @param {Array<string>} components - A list of abbreviations of stack
+   * components to return distinct ones from.
+   * @returns {Array<string>} - An array of components that have distinct base
+   * urls.
+   */
+  getComponentsWithDistinctBaseUrls(components = STACK_COMPONENTS) {
+    const distinctComponents = components.reduce((collection, component) => {
+      if (
+        Boolean(this.isComponentAvailable(component)) &&
+        !Object.values(collection).includes(this.getComponentUrlByName(component))
+      ) {
+        return { ...collection, [component]: this.getComponentUrlByName(component) }
+      }
+      return collection
+    }, {})
+
+    return Object.keys(distinctComponents)
+  }
+}
+
+export default StackConfiguration

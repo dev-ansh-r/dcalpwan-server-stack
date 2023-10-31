@@ -1,0 +1,24 @@
+
+
+.container
+  width: 100%
+  min-height: 100%
+  position: relative
+  display: flex
+  flex-direction: column
+  justify-content: space-between
+
+.main
+  position: relative
+  display: flex
+  flex-direction: column
+  +media-query-min($bp.s)
+    min-height: "calc(100vh - %s - %s)" % ($header-height $footer-height)
+  +media-query($bp.s)
+    min-height: "calc(100vh - %s - %s)" % ($header-height-mobile $footer-height)
+
+global-sidebar()
+
+.stage
+  flex: 1
+  padding-bottom: $ls.xxs

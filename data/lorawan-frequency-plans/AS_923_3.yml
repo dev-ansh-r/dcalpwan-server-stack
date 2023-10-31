@@ -1,0 +1,26 @@
+band-id: AS_923_3
+uplink-channels:
+- frequency: 916600000
+  min-data-rate: 0
+  max-data-rate: 5
+  radio: 0
+- frequency: 916800000
+  min-data-rate: 0
+  max-data-rate: 5
+  radio: 0
+downlink-channels:
+- frequency: 916600000
+  min-data-rate: 0
+  max-data-rate: 5
+- frequency: 916800000
+  min-data-rate: 0
+  max-data-rate: 5
+radios:
+- enable: true
+  chip-type: SX1257
+  frequency: 916700000
+  rssi-offset: -166
+  tx:
+    min-frequency: 915000000
+    max-frequency: 928000000
+clock-source: 1

@@ -1,0 +1,142 @@
+package gatewayconfigurationserver
+
+import (
+	"testing"
+
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/component"
+	componenttest "go.thethings.network/lorawan-stack/v3/pkg/component/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+)
+
+func TestSetTTKGFirmwareURL(t *testing.T) {
+	buildConfig := func(firmwareURL, channel string) TheThingsGatewayConfig {
+		var c TheThingsGatewayConfig
+		c.Default.FirmwareURL = firmwareURL
+		c.Default.UpdateChannel = channel
+		return c
+	}
+
+	for _, tt := range []struct {
+		Name          string
+		Config        TheThingsGatewayConfig
+		UpdateChannel string
+		ExpectedURL   string
+	}{
+		{
+			Name:          "No config, no channel",
+			UpdateChannel: "",
+			ExpectedURL:   "https://ttkg-fw.thethingsindustries.com/v1/stable",
+		},
+		{
+			Name:          "No config, beta channel",
+			UpdateChannel: "beta",
+			ExpectedURL:   "https://ttkg-fw.thethingsindustries.com/v1/beta",
+		},
+		{
+			Name:          "Config with defaults, no channel",
+			Config:        buildConfig("https://firmware.net/the-things-gateway/v1", "channel"),
+			UpdateChannel: "",
+			ExpectedURL:   "https://firmware.net/the-things-gateway/v1/channel",
+		},
+		{
+			Name:          "Config with defaults, beta channel",
+			Config:        buildConfig("https://firmware.net/the-things-gateway/v1", "channel"),
+			UpdateChannel: "beta",
+			ExpectedURL:   "https://firmware.net/the-things-gateway/v1/beta",
+		},
+		{
+			Name:          "No config, full URL",
+			UpdateChannel: "https://firmware.net/the-things-gateway/v1/channel",
+			ExpectedURL:   "https://firmware.net/the-things-gateway/v1/channel",
+		},
+	} {
+		t.Run(tt.Name, func(t *testing.T) {
+			a := assertions.New(t)
+			s := New(componenttest.NewComponent(t, &component.Config{}), WithTheThingsGatewayConfig(tt.Config))
+			url := s.ttkgFirmwareURL(tt.UpdateChannel)
+			a.So(url, should.Equal, tt.ExpectedURL)
+		})
+	}
+}
+
+func TestInferMQTTAddress(t *testing.T) {
+	for _, tt := range []struct {
+		Name    string
+		Address string
+		Config  TheThingsGatewayConfig
+		Assert  func(*assertions.Assertion, string, error)
+	}{
+		{
+			Name:    "Empty address",
+			Address: "",
+			Assert: func(a *assertions.Assertion, address string, err error) {
+				a.So(err, assertions.ShouldBeNil)
+				a.So(address, assertions.ShouldEqual, "")
+			},
+		},
+		{
+			Name:    "Only host, no port or scheme",
+			Address: "localhost",
+			Assert: func(a *assertions.Assertion, address string, err error) {
+				a.So(err, assertions.ShouldBeNil)
+				a.So(address, assertions.ShouldEqual, "mqtts://localhost:8881")
+			},
+		},
+		{
+			Name:    "Host and MQTT port, no scheme",
+			Address: "localhost:1881",
+			Assert: func(a *assertions.Assertion, address string, err error) {
+				a.So(err, assertions.ShouldBeNil)
+				a.So(address, assertions.ShouldEqual, "mqtt://localhost:1881")
+			},
+		},
+		{
+			Name:    "Host and MQTTS port, no scheme",
+			Address: "localhost:8881",
+			Assert: func(a *assertions.Assertion, address string, err error) {
+				a.So(err, assertions.ShouldBeNil)
+				a.So(address, assertions.ShouldEqual, "mqtts://localhost:8881")
+			},
+		},
+		{
+			Name:    "Full mqtts address",
+			Address: "mqtts://localhost:8871",
+			Assert: func(a *assertions.Assertion, address string, err error) {
+				a.So(err, assertions.ShouldBeNil)
+				a.So(address, assertions.ShouldEqual, "mqtts://localhost:8871")
+			},
+		},
+		{
+			Name:    "Full mqtt address",
+			Address: "mqtt://localhost:1871",
+			Assert: func(a *assertions.Assertion, address string, err error) {
+				a.So(err, assertions.ShouldBeNil)
+				a.So(address, assertions.ShouldEqual, "mqtt://localhost:1871")
+			},
+		},
+		{
+			Name:    "Full http address",
+			Address: "http://localhost",
+			Assert: func(a *assertions.Assertion, address string, err error) {
+				a.So(err, assertions.ShouldBeNil)
+				a.So(address, assertions.ShouldEqual, "http://localhost")
+			},
+		},
+		{
+			Name:    "Invalid port format",
+			Address: "localhost::zzz",
+			Assert: func(a *assertions.Assertion, address string, err error) {
+				a.So(err, assertions.ShouldNotBeNil)
+				a.So(address, assertions.ShouldEqual, "")
+			},
+		},
+	} {
+		t.Run(tt.Name, func(t *testing.T) {
+			a := assertions.New(t)
+			s := New(componenttest.NewComponent(t, &component.Config{}), WithTheThingsGatewayConfig(tt.Config))
+			address, err := s.inferMQTTAddress(tt.Address)
+			tt.Assert(a, address, err)
+		})
+	}
+}

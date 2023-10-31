@@ -1,0 +1,45 @@
+
+
+import createRequestActions from '@ttn-lw/lib/store/actions/create-request-actions'
+
+export const CREATE_PUBSUB_BASE = 'CREATE_PUBSUB'
+export const [
+  { request: CREATE_PUBSUB, success: CREATE_PUBSUB_PUBSUB, failure: CREATE_PUBSUB_FAILURE },
+  { request: createPubsub, success: createPubsubSuccess, failure: createPubsubFailure },
+] = createRequestActions(CREATE_PUBSUB_BASE, (appId, pubsub) => ({ appId, pubsub }))
+
+export const GET_PUBSUB_BASE = 'GET_PUBSUB'
+export const [
+  { request: GET_PUBSUB, success: GET_PUBSUB_SUCCESS, failure: GET_PUBSUB_FAILURE },
+  { request: getPubsub, success: getPubsubSuccess, failure: getPubsubFailure },
+] = createRequestActions(
+  GET_PUBSUB_BASE,
+  (appId, pubsubId) => ({ appId, pubsubId }),
+  (appId, pubsubId, selector) => ({ selector }),
+)
+
+export const GET_PUBSUBS_LIST_BASE = 'GET_PUBSUBS_LIST'
+export const [
+  {
+    request: GET_PUBSUBS_LIST,
+    success: GET_PUBSUBS_LIST_SUCCESS,
+    failure: GET_PUBSUBS_LIST_FAILURE,
+  },
+  { request: getPubsubsList, success: getPubsubsListSuccess, failure: getPubsubsListFailure },
+] = createRequestActions(GET_PUBSUBS_LIST_BASE, appId => ({ appId }))
+
+export const UPDATE_PUBSUB_BASE = 'UPDATE_PUBSUB'
+export const [
+  { request: UPDATE_PUBSUB, success: UPDATE_PUBSUB_SUCCESS, failure: UPDATE_PUBSUB_FAILURE },
+  { request: updatePubsub, success: updatePubsubSuccess, failure: updatePubsubFailure },
+] = createRequestActions(UPDATE_PUBSUB_BASE, (appId, pubsubId, patch) => ({
+  appId,
+  pubsubId,
+  patch,
+}))
+
+export const DELETE_PUBSUB_BASE = 'DELETE_PUBSUB'
+export const [
+  { request: DELETE_PUBSUB, success: DELETE_PUBSUB_SUCCESS, failure: DELETE_PUBSUB_FAILURE },
+  { request: deletePubsub, success: deletePubsubSuccess, failure: deletePubsubFailure },
+] = createRequestActions(DELETE_PUBSUB_BASE, (appId, pubsubId) => ({ appId, pubsubId }))

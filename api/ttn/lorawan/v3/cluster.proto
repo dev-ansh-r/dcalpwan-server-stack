@@ -1,0 +1,22 @@
+
+
+syntax = "proto3";
+
+package ttn.lorawan.v3;
+
+import "ttn/lorawan/v3/enums.proto";
+
+option go_package = "go.thethings.network/lorawan-stack/v3/pkg/ttnpb";
+
+// PeerInfo
+message PeerInfo {
+  // Port on which the gRPC server is exposed.
+  uint32 grpc_port = 1;
+  // Indicates whether the gRPC server uses TLS.
+  bool tls = 2;
+  // Roles of the peer.
+  repeated ClusterRole roles = 3;
+
+  // Tags of the peer
+  map<string, string> tags = 4;
+}

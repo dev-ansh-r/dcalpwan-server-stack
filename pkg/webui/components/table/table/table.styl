@@ -1,0 +1,27 @@
+
+
+.table
+  border-collapse: collapse
+  width: 100%
+  table-layout: fixed
+  display: table
+
+  .empty-message
+    display: table-caption
+    caption-side: bottom
+    text-align: center
+    margin-top: $ls.xs
+    color: $tc-subtle-gray
+    font-weight: normal
+
+.section
+
+  &-header
+    display: table-header-group
+
+  &-body
+    display: table-row-group
+
+  &-footer
+    display: flex
+    justify-content: center

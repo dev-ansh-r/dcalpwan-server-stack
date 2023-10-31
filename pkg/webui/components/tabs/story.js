@@ -1,0 +1,140 @@
+
+
+/* eslint-disable react/prop-types */
+
+import React, { Component } from 'react'
+import bind from 'autobind-decorator'
+import { withInfo } from '@storybook/addon-info'
+
+import Tabs from '.'
+
+class Example extends Component {
+  constructor(props) {
+    super(props)
+
+    this.state = {
+      activeTab: props.active,
+    }
+  }
+
+  @bind
+  onTabChange(activeTab) {
+    this.setState({ activeTab })
+  }
+
+  render() {
+    const { activeTab } = this.state
+
+    return <Tabs {...this.props} active={activeTab} onTabChange={this.onTabChange} />
+  }
+}
+
+export default {
+  title: 'Tabs',
+
+  decorators: [
+    withInfo({
+      inline: true,
+      header: false,
+      source: true,
+      propTables: [Tabs],
+      propTablesExclude: [Example],
+    }),
+  ],
+}
+
+export const Default = () => {
+  const tabs = [
+    { title: 'All', name: 'all' },
+    { title: 'Starred', name: 'starred' },
+  ]
+
+  return <Example tabs={tabs} active={tabs[0].name} />
+}
+
+export const DefaultDisabled = () => {
+  const tabs = [
+    { title: 'All', name: 'all' },
+    { title: 'Starred', name: 'starred', disabled: true },
+  ]
+
+  return <Example tabs={tabs} active={tabs[0].name} />
+}
+
+DefaultDisabled.story = {
+  name: 'Default (disabled)',
+}
+
+export const DefaultNarrow = () => {
+  const tabs = [
+    { title: 'All', name: 'all' },
+    { title: 'Starred', name: 'starred' },
+  ]
+
+  return <Example tabs={tabs} active={tabs[0].name} narrow />
+}
+
+DefaultNarrow.story = {
+  name: 'Default (narrow)',
+}
+
+export const WithIcons = () => {
+  const tabs = [
+    { title: 'People', name: 'people', icon: 'organization' },
+    { title: 'Data', name: 'data', icon: 'data' },
+  ]
+
+  return <Example tabs={tabs} active={tabs[0].name} narrow />
+}
+
+WithIcons.story = {
+  name: 'With icons',
+}
+
+export const WithIconsDisabled = () => {
+  const tabs = [
+    { title: 'People', name: 'people', icon: 'organization' },
+    { title: 'Data', name: 'data', icon: 'data', disabled: true },
+  ]
+
+  return <Example tabs={tabs} active={tabs[0].name} />
+}
+
+WithIconsDisabled.story = {
+  name: 'With icons (disabled)',
+}
+
+export const Link = () => {
+  const tabs = [
+    { title: 'People', name: 'people', link: '/people' },
+    { title: 'Data', name: 'data', link: '/data' },
+  ]
+
+  return <Example tabs={tabs} />
+}
+
+export const LinkDisabled = () => {
+  const tabs = [
+    { title: 'People', name: 'people', link: '/people' },
+    { title: 'Data', name: 'data', link: '/data', disabled: true },
+  ]
+
+  return <Example tabs={tabs} />
+}
+
+LinkDisabled.story = {
+  name: 'Link (disabled)',
+}
+
+export const LinkNarrow = () => {
+  const tabs = [
+    { title: 'People', name: 'people', link: '/people' },
+    { title: 'Data', name: 'data', link: '/data' },
+  ]
+
+  return <Example tabs={tabs} narrow />
+}
+
+LinkNarrow.story = {
+  name: 'Link (narrow)',
+}

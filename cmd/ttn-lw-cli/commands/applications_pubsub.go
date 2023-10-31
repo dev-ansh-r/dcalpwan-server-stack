@@ -1,0 +1,356 @@
+package commands
+
+import (
+	"encoding/hex"
+	"os"
+	"strings"
+
+	"github.com/TheThingsIndustries/protoc-gen-go-flags/flagsplugin"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"go.thethings.network/lorawan-stack/v3/cmd/internal/io"
+	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/api"
+	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/util"
+	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+)
+
+var (
+	selectApplicationPubSubFlags = util.NormalizedFlagSet()
+	setApplicationPubSubFlags    = util.NormalizedFlagSet()
+
+	natsProviderApplicationPubSubFlags   = util.NormalizedFlagSet()
+	mqttProviderApplicationPubSubFlags   = util.NormalizedFlagSet()
+	awsiotProviderApplicationPubSubFlags = util.NormalizedFlagSet()
+	awsiotDefaultIntegrationPubSubFlags  = util.NormalizedFlagSet()
+
+	selectAllApplicationPubSubFlags = util.SelectAllFlagSet("application pub/sub")
+)
+
+func applicationPubSubIDFlags() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+	flagSet.String("application-id", "", "")
+	flagSet.String("pubsub-id", "", "")
+	return flagSet
+}
+
+func applicationPubSubProviderFlags() *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+	flagSet.Bool("nats", false, "use the NATS provider")
+	util.HideFlag(flagSet, "nats")
+	flagSet.AddFlagSet(natsProviderApplicationPubSubFlags)
+	flagSet.Bool("mqtt", false, "use the MQTT provider")
+	util.HideFlag(flagSet, "mqtt")
+	flagSet.AddFlagSet(mqttProviderApplicationPubSubFlags)
+	flagSet.AddFlagSet(util.HideFlagSet(dataFlags("mqtt.tls-ca", "")))
+	flagSet.AddFlagSet(util.HideFlagSet(dataFlags("mqtt.tls-client-cert", "")))
+	flagSet.AddFlagSet(util.HideFlagSet(dataFlags("mqtt.tls-client-key", "")))
+	flagSet.Bool("aws-iot", false, "use the AWS IoT provider")
+	util.HideFlag(flagSet, "aws-iot")
+	flagSet.AddFlagSet(awsiotProviderApplicationPubSubFlags)
+	flagSet.AddFlagSet(awsiotDefaultIntegrationPubSubFlags)
+	addDeprecatedProviderFlags(flagSet)
+	return flagSet
+}
+
+func addDeprecatedProviderFlags(flagSet *pflag.FlagSet) {
+	util.DeprecateFlag(flagSet, "nats_server_url", "nats.server_url")
+}
+
+func forwardDeprecatedProviderFlags(flagSet *pflag.FlagSet) {
+	util.ForwardFlag(flagSet, "nats_server_url", "nats.server_url")
+}
+
+var errNoPubSubID = errors.DefineInvalidArgument("no_pub_sub_id", "no pub/sub ID set")
+
+func getApplicationPubSubID(flagSet *pflag.FlagSet, args []string) (*ttnpb.ApplicationPubSubIdentifiers, error) {
+	forwardDeprecatedProviderFlags(flagSet)
+	applicationID, _ := flagSet.GetString("application-id")
+	pubsubID, _ := flagSet.GetString("pubsub-id")
+	switch len(args) {
+	case 0:
+	case 1:
+		logger.Warn("Only single ID found in arguments, not considering arguments")
+	case 2:
+		applicationID = args[0]
+		pubsubID = args[1]
+	default:
+		logger.Warn("Multiple IDs found in arguments, considering the first")
+		applicationID = args[0]
+		pubsubID = args[1]
+	}
+	if applicationID == "" {
+		return nil, errNoApplicationID.New()
+	}
+	if pubsubID == "" {
+		return nil, errNoPubSubID.New()
+	}
+	return &ttnpb.ApplicationPubSubIdentifiers{
+		ApplicationIds: &ttnpb.ApplicationIdentifiers{ApplicationId: applicationID},
+		PubSubId:       pubsubID,
+	}, nil
+}
+
+var (
+	applicationsPubSubsCommand = &cobra.Command{
+		Use:     "pubsubs",
+		Aliases: []string{"pubsub", "ps"},
+		Short:   "Application pub/sub commands",
+	}
+	applicationsPubSubsGetFormatsCommand = &cobra.Command{
+		Use:     "get-formats",
+		Aliases: []string{"formats", "list-formats"},
+		Short:   "Get the available formats for application pubsubs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewApplicationPubSubRegistryClient(as).GetFormats(ctx, ttnpb.Empty)
+			if err != nil {
+				return err
+			}
+
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
+	applicationsPubSubsGetCommand = &cobra.Command{
+		Use:     "get [application-id] [pubsub-id]",
+		Aliases: []string{"info"},
+		Short:   "Get the properties of an application pub/sub",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			forwardDeprecatedProviderFlags(cmd.Flags())
+			pubsubID, err := getApplicationPubSubID(cmd.Flags(), args)
+			if err != nil {
+				return err
+			}
+			paths := util.SelectFieldMask(cmd.Flags(), selectApplicationPubSubFlags)
+			if len(paths) == 0 {
+				logger.Warn("No fields selected, will select everything")
+				selectApplicationPubSubFlags.VisitAll(func(flag *pflag.Flag) {
+					paths = append(paths, strings.Replace(flag.Name, "-", "_", -1))
+				})
+			}
+			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.ApplicationPubSubRegistry/Get"].Allowed)
+
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewApplicationPubSubRegistryClient(as).Get(ctx, &ttnpb.GetApplicationPubSubRequest{
+				Ids:       pubsubID,
+				FieldMask: ttnpb.FieldMask(paths...),
+			})
+			if err != nil {
+				return err
+			}
+
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
+	applicationsPubSubsListCommand = &cobra.Command{
+		Use:     "list [application-id]",
+		Aliases: []string{"ls"},
+		Short:   "List application pubsubs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			forwardDeprecatedProviderFlags(cmd.Flags())
+			appID := getApplicationID(cmd.Flags(), args)
+			if appID == nil {
+				return errNoApplicationID.New()
+			}
+			paths := util.SelectFieldMask(cmd.Flags(), selectApplicationPubSubFlags)
+			if len(paths) == 0 {
+				logger.Warn("No fields selected, will select everything")
+				selectApplicationPubSubFlags.VisitAll(func(flag *pflag.Flag) {
+					paths = append(paths, strings.Replace(flag.Name, "-", "_", -1))
+				})
+			}
+			paths = ttnpb.AllowedFields(paths, ttnpb.RPCFieldMaskPaths["/ttn.lorawan.v3.ApplicationPubSubRegistry/List"].Allowed)
+
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			res, err := ttnpb.NewApplicationPubSubRegistryClient(as).List(ctx, &ttnpb.ListApplicationPubSubsRequest{
+				ApplicationIds: appID,
+				FieldMask:      ttnpb.FieldMask(paths...),
+			})
+			if err != nil {
+				return err
+			}
+
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
+	applicationsPubSubsSetCommand = &cobra.Command{
+		Use:     "set [application-id] [pubsub-id]",
+		Aliases: []string{"update"},
+		Short:   "Set the properties of an application pub/sub",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			forwardDeprecatedProviderFlags(cmd.Flags())
+			pubsubID, err := getApplicationPubSubID(cmd.Flags(), args)
+			if err != nil {
+				return err
+			}
+			paths := util.UpdateFieldMask(cmd.Flags(), setApplicationPubSubFlags)
+
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			pubsub, err := ttnpb.NewApplicationPubSubRegistryClient(as).Get(ctx, &ttnpb.GetApplicationPubSubRequest{
+				Ids:       pubsubID,
+				FieldMask: ttnpb.FieldMask(paths...),
+			})
+			if err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			if pubsub == nil {
+				pubsub = &ttnpb.ApplicationPubSub{Ids: pubsubID}
+			}
+			_, err = pubsub.SetFromFlags(cmd.Flags(), "")
+			if err != nil {
+				return err
+			}
+
+			if nats, _ := cmd.Flags().GetBool("nats"); nats {
+				if pubsub.GetNats() == nil {
+					paths = append(paths, "provider")
+					pubsub.Provider = &ttnpb.ApplicationPubSub_Nats{
+						Nats: &ttnpb.ApplicationPubSub_NATSProvider{},
+					}
+				} else {
+					providerPaths := util.UpdateFieldMask(cmd.Flags(), natsProviderApplicationPubSubFlags)
+					providerPaths = ttnpb.FieldsWithPrefix("provider", providerPaths...)
+					paths = append(paths, providerPaths...)
+				}
+				_, err = pubsub.GetNats().SetFromFlags(cmd.Flags(), "nats")
+				if err != nil {
+					return err
+				}
+			}
+
+			if mqtt, _ := cmd.Flags().GetBool("mqtt"); mqtt {
+				if pubsub.GetMqtt() == nil {
+					paths = append(paths, "provider")
+					pubsub.Provider = &ttnpb.ApplicationPubSub_Mqtt{
+						Mqtt: &ttnpb.ApplicationPubSub_MQTTProvider{},
+					}
+				} else {
+					providerPaths := util.UpdateFieldMask(cmd.Flags(), mqttProviderApplicationPubSubFlags)
+					providerPaths = ttnpb.FieldsWithPrefix("provider", providerPaths...)
+					paths = append(paths, providerPaths...)
+				}
+				if useTLS, _ := cmd.Flags().GetBool("mqtt.use-tls"); useTLS {
+					for _, name := range []string{
+						"mqtt.tls-ca",
+						"mqtt.tls-client-cert",
+						"mqtt.tls-client-key",
+					} {
+						data, err := getDataBytes(name, cmd.Flags())
+						if err != nil {
+							return err
+						}
+						err = cmd.Flags().Set(name, hex.EncodeToString(data))
+						if err != nil {
+							return err
+						}
+					}
+				}
+				_, err := pubsub.GetMqtt().SetFromFlags(cmd.Flags(), "mqtt")
+				if err != nil {
+					return err
+				}
+			}
+
+			if awsiot, _ := cmd.Flags().GetBool("aws-iot"); awsiot {
+				if pubsub.GetAwsIot() == nil {
+					paths = append(paths, "provider")
+					pubsub.Provider = &ttnpb.ApplicationPubSub_AwsIot{
+						AwsIot: &ttnpb.ApplicationPubSub_AWSIoTProvider{},
+					}
+				} else {
+					providerPaths := util.UpdateFieldMask(cmd.Flags(), awsiotProviderApplicationPubSubFlags)
+					providerPaths = ttnpb.FieldsWithPrefix("provider", providerPaths...)
+					paths = append(paths, providerPaths...)
+				}
+				_, err = pubsub.GetAwsIot().SetFromFlags(cmd.Flags(), "aws-iot")
+				if err != nil {
+					return err
+				}
+				if defaultStackName, _ := cmd.Flags().GetString("aws-iot.deployment.default.stack-name"); defaultStackName != "" {
+					defaultPaths := util.UpdateFieldMask(cmd.Flags(), awsiotDefaultIntegrationPubSubFlags)
+					defaultPaths = ttnpb.FieldsWithPrefix("provider", defaultPaths...)
+					paths = append(paths, defaultPaths...)
+					defaultIntegration := &ttnpb.ApplicationPubSub_AWSIoTProvider_DefaultIntegration{}
+					_, err = defaultIntegration.SetFromFlags(cmd.Flags(), "aws-iot.deployment.default")
+					if err != nil {
+						return err
+					}
+					pubsub.GetAwsIot().Deployment = &ttnpb.ApplicationPubSub_AWSIoTProvider_Default{
+						Default: defaultIntegration,
+					}
+				}
+			}
+
+			res, err := ttnpb.NewApplicationPubSubRegistryClient(as).Set(ctx, &ttnpb.SetApplicationPubSubRequest{
+				Pubsub:    pubsub,
+				FieldMask: ttnpb.FieldMask(paths...),
+			})
+			if err != nil {
+				return err
+			}
+
+			return io.Write(os.Stdout, config.OutputFormat, res)
+		},
+	}
+	applicationsPubSubsDeleteCommand = &cobra.Command{
+		Use:     "delete [application-id] [pubsub-id]",
+		Aliases: []string{"del", "remove", "rm"},
+		Short:   "Delete an application pub/sub",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pubsubID, err := getApplicationPubSubID(cmd.Flags(), args)
+			if err != nil {
+				return err
+			}
+
+			as, err := api.Dial(ctx, config.ApplicationServerGRPCAddress)
+			if err != nil {
+				return err
+			}
+			_, err = ttnpb.NewApplicationPubSubRegistryClient(as).Delete(ctx, pubsubID)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+)
+
+func init() {
+	ttnpb.AddSetFlagsForApplicationPubSub_NATSProvider(natsProviderApplicationPubSubFlags, "nats", true)
+	ttnpb.AddSetFlagsForApplicationPubSub_MQTTProvider(mqttProviderApplicationPubSubFlags, "mqtt", true)
+	ttnpb.AddSetFlagsForApplicationPubSub_AWSIoTProvider(awsiotProviderApplicationPubSubFlags, "aws-iot", true)
+	ttnpb.AddSetFlagsForApplicationPubSub_AWSIoTProvider_DefaultIntegration(awsiotDefaultIntegrationPubSubFlags, "aws-iot.deployment.default", true)
+	ttnpb.AddSetFlagsForApplicationPubSub(setApplicationPubSubFlags, "", false)
+	ttnpb.AddSelectFlagsForApplicationPubSub(selectApplicationPubSubFlags, "", false)
+	applicationsPubSubsCommand.AddCommand(applicationsPubSubsGetFormatsCommand)
+	ttnpb.AddSetFlagsForApplicationPubSubIdentifiers(applicationsPubSubsGetCommand.Flags(), "", true)
+	flagsplugin.AddAlias(applicationsPubSubsGetCommand.Flags(), "application-ids.application-id", "application-id", flagsplugin.WithHidden(false))
+	flagsplugin.AddAlias(applicationsPubSubsGetCommand.Flags(), "pub-sub-id", "pubsub-id", flagsplugin.WithHidden(false))
+	applicationsPubSubsGetCommand.Flags().AddFlagSet(selectApplicationPubSubFlags)
+	applicationsPubSubsGetCommand.Flags().AddFlagSet(selectAllApplicationPubSubFlags)
+	applicationsPubSubsCommand.AddCommand(applicationsPubSubsGetCommand)
+	applicationsPubSubsListCommand.Flags().AddFlagSet(applicationIDFlags())
+	applicationsPubSubsListCommand.Flags().AddFlagSet(selectApplicationPubSubFlags)
+	applicationsPubSubsListCommand.Flags().AddFlagSet(selectAllApplicationPubSubFlags)
+	applicationsPubSubsCommand.AddCommand(applicationsPubSubsListCommand)
+	applicationsPubSubsSetCommand.Flags().AddFlagSet(applicationPubSubIDFlags())
+	applicationsPubSubsSetCommand.Flags().AddFlagSet(setApplicationPubSubFlags)
+	applicationsPubSubsSetCommand.Flags().AddFlagSet(applicationPubSubProviderFlags())
+	applicationsPubSubsCommand.AddCommand(applicationsPubSubsSetCommand)
+	applicationsPubSubsDeleteCommand.Flags().AddFlagSet(applicationPubSubIDFlags())
+	applicationsPubSubsCommand.AddCommand(applicationsPubSubsDeleteCommand)
+	applicationsCommand.AddCommand(applicationsPubSubsCommand)
+}

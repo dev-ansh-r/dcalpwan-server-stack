@@ -1,0 +1,22 @@
+
+
+.status
+  display: inline-flex
+  min-width: 60px
+  align-items: center
+  margin-right: $cs.xs
+
+  &.online
+    .icon
+      color: $c-info
+
+  &.checking
+    .icon
+      color: $c-warning
+
+  &.offline
+    .icon
+      color: $c-error
+
+.icon
+  margin-right: $cs.xxs

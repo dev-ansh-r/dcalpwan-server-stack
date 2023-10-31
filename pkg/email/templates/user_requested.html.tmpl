@@ -1,0 +1,20 @@
+{{- define "title" -}}
+User Requested
+{{- end -}}
+
+{{- define "preview" -}}
+Your review is required for a newly registered user.
+{{- end -}}
+
+{{- define "body" -}}
+<p>
+Dear {{ .ReceiverName }},
+</p>
+<p>
+A new user with ID <code>{{ .User.Ids.IDString }}</code> just registered on <b>{{ .Network.Name }}</b>.
+Since user registration requires admin approval, you need to approve this user before they can login.
+</p>
+
+You can review this user <a href="{{ .ConsoleURL }}">in the Console</a>.
+</p>
+{{- end -}}

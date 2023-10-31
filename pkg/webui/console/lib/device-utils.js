@@ -1,0 +1,240 @@
+
+
+import randomByteString from '@console/lib/random-bytes'
+
+export const ACTIVATION_MODES = Object.freeze({
+  OTAA: 'otaa',
+  ABP: 'abp',
+  MULTICAST: 'multicast',
+  NONE: 'none',
+})
+
+export const DEVICE_CLASSES = Object.freeze({
+  CLASS_A: 'a',
+  CLASS_B: 'b',
+  CLASS_C: 'c',
+})
+
+export const PHY_V1_0 = { value: 'PHY_V1_0', label: 'TS001 Technical Specification 1.0.0' }
+export const PHY_V1_0_1 = { value: 'PHY_V1_0_1', label: 'TS001 Technical Specification 1.0.1' }
+export const PHY_V1_0_2_REV_A = {
+  value: 'PHY_V1_0_2_REV_A',
+  label: 'RP001 Regional Parameters 1.0.2',
+}
+export const PHY_V1_0_2_REV_B = {
+  value: 'PHY_V1_0_2_REV_B',
+  label: 'RP001 Regional Parameters 1.0.2 revision B',
+}
+export const PHY_V1_0_3_REV_A = {
+  value: 'PHY_V1_0_3_REV_A',
+  label: 'RP001 Regional Parameters 1.0.3 revision A',
+}
+export const PHY_V1_1_REV_A = {
+  value: 'PHY_V1_1_REV_A',
+  label: 'RP001 Regional Parameters 1.1 revision A',
+}
+export const PHY_V1_1_REV_B = {
+  value: 'PHY_V1_1_REV_B',
+  label: 'RP001 Regional Parameters 1.1 revision B',
+}
+export const RP002_V1_0_0 = { value: 'RP002_V1_0_0', label: 'RP002 Regional Parameters 1.0.0' }
+export const RP002_V1_0_1 = { value: 'RP002_V1_0_1', label: 'RP002 Regional Parameters 1.0.1' }
+export const RP002_V1_0_2 = { value: 'RP002_V1_0_2', label: 'RP002 Regional Parameters 1.0.2' }
+export const RP002_V1_0_3 = { value: 'RP002_V1_0_3', label: 'RP002 Regional Parameters 1.0.3' }
+export const RP002_V1_0_4 = { value: 'RP002_V1_0_4', label: 'RP002 Regional Parameters 1.0.4' }
+
+export const LORAWAN_PHY_VERSIONS = Object.freeze([
+  PHY_V1_0,
+  PHY_V1_0_1,
+  PHY_V1_0_2_REV_A,
+  PHY_V1_0_2_REV_B,
+  PHY_V1_0_3_REV_A,
+  PHY_V1_1_REV_A,
+  PHY_V1_1_REV_B,
+  RP002_V1_0_0,
+  RP002_V1_0_1,
+  RP002_V1_0_2,
+  RP002_V1_0_3,
+  RP002_V1_0_4,
+])
+
+export const LORAWAN_VERSION_PAIRS = {
+  100: [PHY_V1_0],
+  101: [PHY_V1_0_1],
+  102: [PHY_V1_0_2_REV_A, PHY_V1_0_2_REV_B],
+  103: [PHY_V1_0_3_REV_A],
+  104: [RP002_V1_0_0, RP002_V1_0_1, RP002_V1_0_2, RP002_V1_0_3, RP002_V1_0_4],
+  110: [
+    PHY_V1_1_REV_A,
+    PHY_V1_1_REV_B,
+    RP002_V1_0_0,
+    RP002_V1_0_1,
+    RP002_V1_0_2,
+    RP002_V1_0_3,
+    RP002_V1_0_4,
+  ],
+  0: LORAWAN_PHY_VERSIONS,
+}
+
+export const MAC_V1_0 = { value: 'MAC_V1_0', label: 'LoRaWAN Specification 1.0.0' }
+export const MAC_V1_0_1 = { value: 'MAC_V1_0_1', label: 'LoRaWAN Specification 1.0.1' }
+export const MAC_V1_0_2 = { value: 'MAC_V1_0_2', label: 'LoRaWAN Specification 1.0.2' }
+export const MAC_V1_0_3 = { value: 'MAC_V1_0_3', label: 'LoRaWAN Specification 1.0.3' }
+export const MAC_V1_0_4 = { value: 'MAC_V1_0_4', label: 'LoRaWAN Specification 1.0.4' }
+export const MAC_V1_1 = { value: 'MAC_V1_1', label: 'LoRaWAN Specification 1.1.0' }
+
+export const LORAWAN_VERSIONS = Object.freeze([
+  MAC_V1_0,
+  MAC_V1_0_1,
+  MAC_V1_0_2,
+  MAC_V1_0_3,
+  MAC_V1_0_4,
+  MAC_V1_1,
+])
+
+export const FRAME_WIDTH_COUNT = Object.freeze({
+  SUPPORTS_16_BIT: 'supports_16_bit',
+  SUPPORTS_32_BIT: 'supports_32_bit',
+})
+
+const lwRegexp = /^MAC_V[1-9]_[0-9](_[0-9])?$/
+const lwCache = {}
+
+/**
+ * Parses string representation of the lorawan mac version to number.
+ *
+ * @param {string} strMacVersion - Formatted string representation for the
+ * lorawan mac version, e.g. 1.1.0.
+ * @returns {number} - Number representation of the lorawan mac version. Returns
+ * 0 if provided
+ * argument is not a valid string representation of the lorawan mac version.
+ * @example
+ *  const parsedVersion = parseLorawanMacVersion('MAC_V1_0'); // returns 100
+ *  const parsedVersion = parseLorawanMacVersion('MAC_V1_0_1'); // returns 110
+ *  const parsedVersion = parseLorawanMacVersion(''); // returns 0
+ *  const parsedVersion = parseLorawanMacVersion('str'); // returns 0
+ */
+export const parseLorawanMacVersion = strMacVersion => {
+  if (lwCache[strMacVersion]) {
+    return lwCache[strMacVersion]
+  }
+
+  if (!Boolean(strMacVersion)) {
+    return 0
+  }
+
+  const match = lwRegexp.exec(strMacVersion)
+  if (match === null || match.length === 0) {
+    return 0
+  }
+
+  const parsed = parseInt(match[0].replace(/\D/g, '').padEnd(3, 0))
+  lwCache[strMacVersion] = parsed
+
+  return lwCache[strMacVersion]
+}
+
+/**
+ * Generates random 16 bytes hex string.
+ *
+ * @returns {string} - 16 bytes hex string.
+ */
+export const generate16BytesKey = () => randomByteString(32)
+
+/**
+ * Encodes string value of the frame counter width radio field to boolean
+ * value necessary for `supports_32_bit_f_ct`.
+ *
+ * @param {string} value - String representation of `supports_32_bit_f_ct` field,
+ * either `supports_16_bit` or `supports_32_bit`.
+ * @returns {boolean} - True if value is equal to `supports_32_bit`, false otherwise.
+ * @example
+ *  const encodedValue = fCntWidthEncode(FRAME_WIDTH_COUNT.SUPPORTS_32_BIT); // returns true
+ *  const encodedValue = fCntWidthEncode(FRAME_WIDTH_COUNT.SUPPORTS_16_BIT); // returns false
+ */
+export const fCntWidthEncode = value => value === FRAME_WIDTH_COUNT.SUPPORTS_32_BIT
+
+/**
+ * Decodes boolean value of `supports_32_bit_f_cnt` to string value
+ * accepted by the radio field.
+ *
+ * @param {boolean} value - Value of `supports_32_bit_f_cnt`.
+ * @returns {string} - String representation of `supports_32_bit_f_cnt` field.
+ * Returns `supports_32_bit` if value is true, `supports_16_bit` if false.
+ * @example
+ *  const decodedValue = fCntWidthDecode(true); // returns `supports_32_bit`
+ *  const decodedValue = fCntWidthDecode(false); // returns `supports_16_bit`
+ */
+export const fCntWidthDecode = value =>
+  value ? FRAME_WIDTH_COUNT.SUPPORTS_32_BIT : FRAME_WIDTH_COUNT.SUPPORTS_16_BIT
+
+const ALL_ZERO_KEY = '0'.repeat(32)
+
+/**
+ * @param {string} key - The session key.
+ * @returns {boolean} - `true` if the key is non-zero, `false` otherwise.
+ */
+export const isNonZeroSessionKey = key => key !== ALL_ZERO_KEY
+
+/**
+ * @param {string} value - The frequency value.
+ * @returns {boolean} - True if the frequency value is valid, false otherwise.
+ */
+export const dynamicFrequencyTest = value => value === 0 || value >= 100000
+
+// End device profile utils.
+
+export const SELECT_OTHER_OPTION = '_other_'
+export const isOtherOption = option => option === SELECT_OTHER_OPTION
+export const hasSelectedDeviceRepositoryOther = version =>
+  version && Object.values(version).some(value => isOtherOption(value))
+
+/*
+  `hardware_version` is not required when registering an end device in the device repository, so for
+  certain end device models it can be missing. When this is the case, we still want to allow the users
+  to select such models because `firmware_version` (that might depend on hw version) and `band_id`
+  are required. `SELECT_UNKNOWN_HW_OPTION` option represents such end devices.
+*/
+export const SELECT_UNKNOWN_HW_OPTION = '_unknown_hw_version_'
+export const isUnknownHwVersion = option => option === SELECT_UNKNOWN_HW_OPTION
+
+// End device lorawan version, phy version and frequency plan utils.
+
+export const getLorawanVersionLabel = ({ lorawan_version }) => {
+  const { label } = LORAWAN_VERSIONS.find(version => version.value === lorawan_version) || {}
+
+  return label
+}
+
+export const getLorawanPhyVersionLabel = ({ lorawan_phy_version }) => {
+  const { label } =
+    LORAWAN_PHY_VERSIONS.find(version => version.value === lorawan_phy_version) || {}
+
+  return label
+}
+
+// Always reset LW and PHY version when changing FP do avoid invalid
+// version combinations that can otherwise occur.
+export const frequencyPlanValueSetter = ({ setValues, setFieldTouched }, { value }) => {
+  setFieldTouched('lorawan_version', false)
+  setFieldTouched('lorawan_phy_version', false)
+  return setValues(values => ({
+    ...values,
+    frequency_plan_id: value,
+    lorawan_version: '',
+    lorawan_phy_version: '',
+  }))
+}
+
+// Always reset the PHY version when setting the lorawan version to avoid
+// invalid version combinations that would otherwise briefly occur until
+// the PHY version is set by the field itself.
+export const lorawanVersionValueSetter = ({ setValues, setFieldTouched }, { value }) => {
+  const phyVersions = LORAWAN_VERSION_PAIRS[parseLorawanMacVersion(value)] || []
+  setFieldTouched('lorawan_phy_version', false)
+  return setValues(values => ({
+    ...values,
+    lorawan_version: value,
+    lorawan_phy_version: phyVersions.length === 1 ? phyVersions[0].value : '',
+  }))
+}

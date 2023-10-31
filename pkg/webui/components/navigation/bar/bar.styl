@@ -1,0 +1,36 @@
+
+
+.link
+  position: relative
+  padding: $cs.xl $cs.m
+  font-size: $fs.m
+  display: inline-flex
+  align-items: center
+  color: $tc-deep-gray
+
+  pseudo-border-animated(3px, $c-divider)
+
+  &:not(.link-active):hover
+    area-hover()
+
+  & > .icon
+    color: $c-icon-fill
+
+  &-active, &-active > .icon
+    color: $tc-active
+
+  &-active
+    area-active()
+    $hover-color = $tc-active
+
+    +pseudo-border(3px, $c-active-blue)
+      transform: scaleX(1)
+
+    &:hover:before
+      background: $hover-color
+
+    &:hover
+      color: $hover-color
+
+.icon
+  margin-right: $cs.xs

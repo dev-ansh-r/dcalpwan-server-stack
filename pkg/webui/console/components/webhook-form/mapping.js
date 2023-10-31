@@ -1,0 +1,131 @@
+
+
+import { isPlainObject } from 'lodash'
+
+const isBasicAuth = header =>
+  isPlainObject(header) && header.key === 'Authorization' && header.value?.startsWith('Basic ')
+const hasBasicAuth = headers => headers instanceof Array && headers.findIndex(isBasicAuth) !== -1
+
+export const decodeMessageType = messageType => {
+  if (isPlainObject(messageType)) {
+    if ('path' in messageType) {
+      return { enabled: true, value: messageType.path }
+    }
+
+    return { enabled: true, value: '' }
+  }
+
+  return { enabled: false, value: '' }
+}
+
+export const encodeMessageType = formValue => {
+  if (formValue && formValue.enabled) {
+    return { path: formValue.value }
+  }
+
+  return null
+}
+
+const decodeHeaders = headersType =>
+  (headersType &&
+    Object.keys(headersType).reduce(
+      (result, key) =>
+        result.concat({
+          key,
+          value: headersType[key],
+        }),
+      [],
+    )) ||
+  []
+
+const encodeHeaders = formValue =>
+  (formValue &&
+    formValue.reduce(
+      (result, { key, value }) => ({
+        ...result,
+        [key]: value,
+      }),
+      {},
+    )) ||
+  null
+
+export const encodeValues = formValues => {
+  const {
+    _basic_auth_enabled,
+    _basic_auth_username,
+    _basic_auth_password,
+    _headers,
+    ...newValues
+  } = formValues
+
+  newValues.headers = encodeHeaders(_headers)
+  if (_basic_auth_enabled) {
+    newValues.headers.Authorization = `Basic ${btoa(
+      `${_basic_auth_username || ''}:${_basic_auth_password || ''}`,
+    )}`
+  }
+
+  return newValues
+}
+
+export const decodeValues = backendValues => {
+  const formValues = { ...backendValues }
+  let decodeError = false
+  if (backendValues?.headers?.Authorization?.startsWith('Basic ')) {
+    const encodedCredentials = backendValues.headers.Authorization.split('Basic ')[1]
+    if (encodedCredentials) {
+      let decodedCredentials
+      try {
+        decodedCredentials = atob(encodedCredentials)
+        formValues._basic_auth_enabled = true
+        formValues._basic_auth_username = decodedCredentials.slice(
+          0,
+          decodedCredentials.indexOf(':'),
+        )
+        formValues._basic_auth_password = decodedCredentials.slice(
+          decodedCredentials.indexOf(':') + 1,
+        )
+      } catch (err) {
+        decodeError = true
+      }
+    }
+  } else {
+    formValues._basic_auth_enabled = false
+    formValues._basic_auth_username = ''
+    formValues._basic_auth_password = ''
+  }
+
+  formValues._headers = decodeHeaders(backendValues?.headers)
+  if (hasBasicAuth(formValues._headers)) {
+    formValues._headers.find(isBasicAuth).readOnly = !decodeError
+    formValues._headers.find(isBasicAuth).decodeError = decodeError
+  }
+
+  return formValues
+}
+
+export const blankValues = {
+  ids: {
+    webhook_id: '',
+  },
+  base_url: '',
+  format: 'json',
+  field_mask: {
+    paths: [],
+  },
+  downlink_api_key: '',
+  uplink_message: null,
+  uplink_normalized: null,
+  join_accept: null,
+  downlink_ack: null,
+  downlink_nack: null,
+  downlink_sent: null,
+  downlink_failed: null,
+  downlink_queued: null,
+  downlink_queue_invalidated: null,
+  location_solved: null,
+  service_data: null,
+  _basic_auth_enabled: false,
+  _basic_auth_username: '',
+  _basic_auth_password: '',
+}

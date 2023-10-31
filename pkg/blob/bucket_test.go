@@ -1,0 +1,95 @@
+package blob_test
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/smarty/assertions"
+	. "go.thethings.network/lorawan-stack/v3/pkg/blob"
+	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+)
+
+func bucketName() string {
+	if name := os.Getenv("TEST_BUCKET"); name != "" {
+		return name
+	}
+	return "bucket"
+}
+
+func testBucket(t *testing.T, conf config.BlobConfig) {
+	a := assertions.New(t)
+	ctx := test.Context()
+
+	bucket, err := conf.Bucket(ctx, bucketName(), test.HTTPClientProvider)
+	if !a.So(err, should.BeNil) {
+		t.Errorf("Failed to create bucket: %v", err)
+		return
+	}
+
+	now := time.Now().Format(time.RFC3339)
+
+	contents := []byte(now)
+	err = bucket.WriteAll(ctx, "path/to/file", contents, WriterOptions("text/plain", "key", "value"))
+	if !a.So(err, should.BeNil) {
+		t.Errorf("Failed to write contents: %v", err)
+		return
+	}
+
+	res, err := bucket.ReadAll(ctx, "path/to/file")
+	if !a.So(err, should.BeNil) {
+		t.Errorf("Failed to read contents: %v", err)
+		return
+	}
+	a.So(res, should.Resemble, contents)
+}
+
+func TestLocal(t *testing.T) {
+	a := assertions.New(t)
+
+	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("BlobTestLocal_%d", time.Now().UnixNano()/1000000))
+	if err := os.Mkdir(tmpDir, 0o755); !a.So(err, should.BeNil) {
+		t.Fatalf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	conf := config.BlobConfig{Provider: "local"}
+	conf.Local.Directory = tmpDir
+
+	testBucket(t, conf)
+}
+
+func TestAWS(t *testing.T) {
+	conf := config.BlobConfig{Provider: "aws"}
+	conf.AWS.Endpoint = os.Getenv("AWS_ENDPOINT")
+	conf.AWS.Region = os.Getenv("AWS_REGION")
+	conf.AWS.AccessKeyID = os.Getenv("AWS_ACCESS_KEY_ID")
+	conf.AWS.SecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	conf.AWS.SessionToken = os.Getenv("AWS_SESSION_TOKEN")
+
+	if conf.AWS.Region == "" || conf.AWS.AccessKeyID == "" || conf.AWS.SecretAccessKey == "" {
+		t.Skip("Missing AWS credentials")
+	}
+
+	testBucket(t, conf)
+}
+
+func TestGCP(t *testing.T) {
+	conf := config.BlobConfig{Provider: "gcp"}
+	conf.GCP.CredentialsFile = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	conf.GCP.Credentials = os.Getenv("GCP_CREDENTIALS")
+
+	if conf.GCP.CredentialsFile == "" && conf.GCP.Credentials == "" {
+		_, err := os.Stat("testdata/gcloud.json")
+		if err != nil {
+			t.Skip("Missing GCP credentials")
+		}
+		conf.GCP.CredentialsFile = "testdata/gcloud.json"
+	}
+
+	testBucket(t, conf)
+}

@@ -1,0 +1,320 @@
+// Package redis implements an events.PubSub implementation that uses Redis PubSub.
+package redis
+
+import (
+	"context"
+	"fmt"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/events"
+	"go.thethings.network/lorawan-stack/v3/pkg/events/basic"
+	"go.thethings.network/lorawan-stack/v3/pkg/events/batch"
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	ttnredis "go.thethings.network/lorawan-stack/v3/pkg/redis"
+	"go.thethings.network/lorawan-stack/v3/pkg/task"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/unique"
+	"go.thethings.network/lorawan-stack/v3/pkg/workerpool"
+)
+
+// NewPubSub creates a new PubSub that publishes and subscribes to Redis.
+func NewPubSub(
+	ctx context.Context, component workerpool.Component, conf config.RedisEvents, batchConf config.BatchEvents,
+) events.PubSub {
+	ttnRedisClient := ttnredis.New(&conf.Config)
+	ctx = log.NewContextWithFields(ctx, log.Fields(
+		"namespace", "events/redis",
+	))
+	ctx, cancel := context.WithCancel(ctx)
+	ps := &PubSub{
+		PubSub: basic.NewPubSub(),
+		ctx:    ctx,
+		cancel: cancel,
+		client: ttnRedisClient,
+
+		subscriptions: make(map[string]int),
+	}
+	ps.sub = ps.client.Subscribe(ctx)
+
+	workers := conf.Workers
+	if workers == 0 {
+		workers = 1
+	}
+
+	for i := 0; i < workers; i++ {
+		component.StartTask(&task.Config{
+			Context: ps.ctx,
+			ID:      fmt.Sprintf("events_redis_subscribe_%02d", i),
+			Func:    ps.subscribeTask,
+			Restart: task.RestartOnFailure,
+			Backoff: task.DefaultBackoffConfig,
+		})
+	}
+
+	ps.transactionPool = workerpool.NewWorkerPool(workerpool.Config[redis.Pipeliner]{
+		Component:  component,
+		Context:    ctx,
+		Name:       "redis_events_transactions",
+		Handler:    ps.runTransaction,
+		MaxWorkers: conf.Publish.MaxWorkers,
+		QueueSize:  conf.Publish.QueueSize,
+	})
+
+	if !conf.Store.Enable {
+		return ps
+	}
+
+	pss := &PubSubStore{
+		PubSub: ps,
+
+		taskStarter: component,
+
+		historyTTL:                conf.Store.TTL,
+		entityHistoryCount:        conf.Store.EntityCount,
+		entityHistoryTTL:          conf.Store.EntityTTL,
+		correlationIDHistoryCount: conf.Store.CorrelationIDCount,
+		streamPartitionSize:       conf.Store.StreamPartitionSize,
+	}
+	if pss.historyTTL == 0 {
+		pss.historyTTL = 10 * time.Minute
+	}
+	if pss.entityHistoryCount == 0 {
+		pss.entityHistoryCount = 100
+	}
+	if pss.entityHistoryTTL == 0 {
+		pss.entityHistoryTTL = time.Hour
+	}
+	if pss.correlationIDHistoryCount == 0 {
+		pss.correlationIDHistoryCount = 100
+	}
+	if pss.streamPartitionSize == 0 {
+		pss.streamPartitionSize = 64
+	}
+
+	pss.publisher = events.PublishFunc(pss.publish)
+	if batchConf.Enable {
+		targetSize, delay := batchConf.TargetSize, batchConf.Delay
+		if targetSize == 0 {
+			targetSize = 64
+		}
+		if delay == 0 {
+			delay = 32 * time.Millisecond
+		}
+		// NOTE: Event publication in the Redis store implementation is CPU-bound due to the marshaling,
+		// so we use the number of CPUs as the number of workers.
+		pss.publisher = batch.NewPublisher(ctx, pss.publisher, component, targetSize, delay, runtime.GOMAXPROCS(-1))
+	}
+
+	return pss
+}
+
+// PubSub with Redis backend.
+type PubSub struct {
+	*basic.PubSub
+	ctx             context.Context
+	cancel          context.CancelFunc
+	client          *ttnredis.Client
+	mu              sync.RWMutex
+	sub             *redis.PubSub
+	subscriptions   map[string]int
+	transactionPool workerpool.WorkerPool[redis.Pipeliner]
+}
+
+func (ps *PubSub) eventChannel(ctx context.Context, name string, ids *ttnpb.EntityIdentifiers) string {
+	if name == "" {
+		name = "*"
+	}
+	if ids == nil {
+		return ps.client.Key("events", "*", "*", name)
+	}
+	return ps.client.Key("events", ids.EntityType(), unique.ID(ctx, ids), name)
+}
+
+var errChannelClosed = errors.DefineAborted("channel_closed", "channel closed")
+
+const (
+	protoEncodingPrefix = "v3-event-proto:"
+	metaEncodingPrefix  = "v3-event-meta:"
+)
+
+func (ps *PubSub) subscribeTask(ctx context.Context) error {
+	logger := log.FromContext(ctx)
+	ch := ps.sub.Channel()
+	store := &PubSubStore{
+		PubSub: ps,
+		// NOTE: only for reading; no additional settings needed.
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg, ok := <-ch:
+			if !ok {
+				return errChannelClosed.New()
+			}
+			var evtPB *ttnpb.Event
+			switch {
+			case strings.HasPrefix(msg.Payload, protoEncodingPrefix):
+				evtPB = &ttnpb.Event{}
+				err := decodeEventData(msg.Payload, evtPB)
+				if err != nil {
+					logger.WithError(err).Warn("Failed to decode event payload")
+					continue
+				}
+			case strings.HasPrefix(msg.Payload, metaEncodingPrefix):
+				m := strings.Split(strings.TrimPrefix(msg.Payload, metaEncodingPrefix), " ")
+				var err error
+				evtPB, err = store.LoadEvent(ctx, m[0])
+				if err != nil {
+					logger.WithError(err).Warn("Failed to load event payload")
+					continue
+				}
+			default:
+				logger.Warn("Skip decoding event with unexpected encoding")
+				continue
+			}
+			evt, err := events.FromProto(evtPB)
+			if err != nil {
+				logger.WithError(err).Warn("Failed to convert event from protobuf")
+				continue
+			}
+			ps.PubSub.Publish(&patternEvent{Event: evt, pattern: msg.Pattern})
+		}
+	}
+}
+
+type patternEvent struct {
+	events.Event
+	pattern string
+}
+
+func (ps *PubSub) eventChannelPatterns(ctx context.Context, names []string, ids []*ttnpb.EntityIdentifiers) []string {
+	if len(names) == 0 {
+		names = []string{"*"}
+	}
+	if len(ids) == 0 {
+		ids = []*ttnpb.EntityIdentifiers{nil}
+	}
+
+	var patterns []string
+	for _, name := range names {
+		for _, id := range ids {
+			patterns = append(patterns, ps.eventChannel(ctx, name, id))
+			if appID := id.GetApplicationIds(); appID != nil {
+				pattern := ps.eventChannel(ctx, name, (&ttnpb.EndDeviceIdentifiers{
+					ApplicationIds: appID,
+					DeviceId:       "*",
+				}).GetEntityIdentifiers())
+				patterns = append(patterns, pattern)
+			}
+		}
+	}
+
+	return patterns
+}
+
+// Subscribe implements the events.Subscriber interface.
+func (ps *PubSub) Subscribe(
+	ctx context.Context, names []string, ids []*ttnpb.EntityIdentifiers, hdl events.Handler,
+) error {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	basicSub, err := basic.NewSubscription(ctx, names, ids, hdl)
+	if err != nil {
+		return err
+	}
+
+	sub := &subscription{
+		basicSub: basicSub,
+		patterns: ps.eventChannelPatterns(ctx, names, ids),
+	}
+
+	ps.PubSub.AddSubscription(sub)
+
+	for _, pattern := range sub.patterns {
+		if ps.subscriptions[pattern] == 0 {
+			err := ps.sub.PSubscribe(ps.ctx, pattern)
+			if err != nil {
+				return err
+			}
+		}
+		ps.subscriptions[pattern]++
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		ps.PubSub.RemoveSubscription(sub)
+
+		ps.mu.Lock()
+		defer ps.mu.Unlock()
+
+		for _, pattern := range sub.patterns {
+			ps.subscriptions[pattern]--
+			if ps.subscriptions[pattern] == 0 {
+				log.FromContext(ctx).WithField("pattern", pattern).Debug("Unsubscribe from Redis channels")
+				err := ps.sub.PUnsubscribe(ps.ctx, pattern)
+				if err != nil {
+					log.FromContext(ps.ctx).WithField("pattern", pattern).WithError(err).Warn("Could not unsubscribe")
+				}
+				delete(ps.subscriptions, pattern)
+			}
+		}
+	}()
+
+	return nil
+}
+
+// Close the Redis publisher.
+func (ps *PubSub) Close(ctx context.Context) error {
+	ps.cancel()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-ps.ctx.Done():
+		if err := ps.client.Close(); err != nil {
+			return err
+		}
+		return ps.ctx.Err()
+	}
+}
+
+// Publish an event to Redis.
+func (ps *PubSub) Publish(evs ...events.Event) {
+	logger := log.FromContext(ps.ctx)
+
+	tx := ps.client.TxPipeline()
+
+	for _, evt := range evs {
+		b, err := encodeEventData(evt)
+		if err != nil {
+			logger.WithError(err).Warn("Failed to encode event")
+			continue
+		}
+		ids := evt.Identifiers()
+		if len(ids) == 0 {
+			tx.Publish(ps.ctx, ps.eventChannel(evt.Context(), evt.Name(), nil), b)
+		}
+		for _, id := range ids {
+			tx.Publish(ps.ctx, ps.eventChannel(evt.Context(), evt.Name(), id), b)
+		}
+	}
+
+	if err := ps.transactionPool.Publish(ps.ctx, tx); err != nil {
+		logger.WithError(err).Warn("Failed to publish transaction")
+	}
+}
+
+func (*PubSub) runTransaction(ctx context.Context, tx redis.Pipeliner) {
+	logger := log.FromContext(ctx)
+	if _, err := tx.Exec(ctx); err != nil {
+		logger.WithError(err).Warn("Failed to run transaction")
+	}
+}

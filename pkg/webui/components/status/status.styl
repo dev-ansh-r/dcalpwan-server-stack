@@ -1,0 +1,83 @@
+
+
+.status
+  position: relative
+  display: inline-block
+  top: -2px
+  width: 5px
+  height: 5px
+  border-radius: 50%
+  transition: background-color $ad.m
+
+  &:not(.flipped)
+    margin-left: $cs.xs
+  &.flipped
+    margin-right: $cs.xs
+
+  &:after
+    content: ''
+    position: absolute
+    top: 0
+    left: 0
+    border-radius: 50%
+    width: 5px
+    height: 5px
+    opacity: .7
+    animation: pulse 2s infinite
+
+  &-good
+    background-color: $c-active-blue
+
+  &-bad
+    background-color: $c-error
+
+  &-mediocre
+    background-color: $c-warning
+
+  &-unknown
+    background-color: $c-icon-fill
+
+.good-pulse:after
+  animation: goodPulse 4s infinite
+
+.bad-pulse:after
+  animation: badPulse 4s infinite
+
+.mediocre-pulse:after
+  animation: mediocrePulse 4s infinite
+
+.triggered-good-pulse:after
+  animation: triggeredGoodPulse 1.5s ease-out
+
+pulse-animation($color, $name)
+  @keyframes $name
+    0%
+      box-shadow: 0 0 0 0 alpha($color, .4)
+
+    50%
+      box-shadow: 0 0 0 6px alpha($color, 0)
+
+    70%
+      box-shadow: 0 0 0 0 alpha($color, 0)
+
+    100%
+      box-shadow: 0 0 0 0 alpha($color, 0)
+
+triggered-pulse-animation($color, $name)
+  @keyframes $name
+    0%
+      box-shadow: 0 0 0 0 alpha($color, 1)
+
+    70%
+      box-shadow: 0 0 4px 10px alpha($color, 0)
+
+    100%
+      box-shadow: 0 0 0 0 alpha($color, 0)
+
+pulse-animation($c-active-blue, 'goodPulse')
+pulse-animation($c-error, 'badPulse')
+pulse-animation($c-error, 'mediocrePulse')
+
+triggered-pulse-animation($c-active-blue, 'triggeredGoodPulse')
+triggered-pulse-animation($c-error, 'triggeredBadPulse')
+triggered-pulse-animation($c-error, 'triggeredMediocrePulse')

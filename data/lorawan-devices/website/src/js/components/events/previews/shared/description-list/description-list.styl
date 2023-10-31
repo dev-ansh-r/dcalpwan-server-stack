@@ -1,0 +1,32 @@
+
+
+.description-list
+  font-family: $font-family-mono
+  font-size: $fs.s
+  margin: 0
+
+.container
+  display: inline-flex
+  align-items: center
+
+  &:not(:last-child)
+    padding-right: $cs.s
+
+  .term
+    color: $tc-subtle-gray
+
+    &:after
+      content: ':'
+
+.value
+  margin-left: $cs.xs
+
+.empty-byte
+  color: $tc-subtle-gray
+  font-style: italic
+
+  &:before
+    content: '<'
+  &:after
+    content: '>'
+

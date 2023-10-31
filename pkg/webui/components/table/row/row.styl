@@ -1,0 +1,22 @@
+
+
+.row
+  display: table-row
+  color: $tc-subtle-gray
+
+  &-head
+    border-dark('bottom')
+
+  &-body
+    border-normal('bottom')
+
+  &-footer
+    display: flex
+
+.clickable
+  cursor: pointer
+  transition: background-color $ad.s linear
+  color: unset
+
+  &:hover
+    background-color: $c-backdrop-lighter

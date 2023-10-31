@@ -1,0 +1,145 @@
+
+
+@require './fonts.styl'
+
+normalize-css()
+
+html, body
+  font-size: $font-size-base
+  height: 100%
+
+body
+  font-family: $font-family
+  line-height: $line-height-base
+  color: $tc-deep-gray
+  -webkit-font-smoothing: antialiased
+  -moz-osx-font-smoothing: grayscale
+  background: white
+
+:global(#app)
+  height: 100%
+
+::-webkit-scrollbar
+  width: .5rem
+  height: .5rem
+
+::-webkit-scrollbar-thumb
+  background-color: darker($c-backdrop)
+
+::-webkit-scrollbar-track
+  padding: 2px
+
+h1
+  h1()
+
+h2
+  h2()
+
+h3
+  h3()
+
+h4
+  h4()
+
+ul li
+  &:not(:last-child)
+    margin-bottom: $cs.s
+
+  a
+    text-decoration: none
+    color: $tc-deep-gray
+
+hr
+  border-normal()
+  background-color: $c-divider
+  border: 0
+  height: 1px
+
+code
+  font-family: $font-family-mono
+  font-size: $fs.s
+  background-color: $c-text-backdrop
+  padding: 0.1rem $cs.xxs
+  color: $tc-black
+  
+summary
+  display: revert
+  cursor: pointer
+  text-decoration: underline
+  user-select: none
+
+
+// Remove focus from elements when targeted by a mouse.
+// The `focus-visible` class is added on focusable elements
+// automatically when in focus.
+// See https://github.com/WICG/focus-visible
+:global(.js-focus-visible) :focus:not(:global(.focus-visible))
+  outline: 0
+
+// Global one-off styles.
+:global
+  .c-error
+    color: $c-error
+
+  .c-success
+    color: $c-success
+
+  .c-warning
+    color: $c-warning
+
+  .c-active
+    color: $c-active-blue
+
+  .tc-subtle-gray
+    color: $tc-subtle-gray
+
+  .tc-deep-gray
+    color: $tc-deep-gray
+
+  .p-0
+    padding: 0 !important
+
+  .pt-0
+    margin-top: 0 !important
+
+  .pb-0
+    margin-bottom: 0 !important
+
+  .m-0
+    margin: 0 !important
+
+  .mt-0
+    margin-top: 0 !important
+
+  .mb-0
+    margin-bottom: 0 !important
+
+  for $size in 'xxs' 'xs' 's' 'l' 'm' 'l' 'xl' 'xxl'
+    .mt-cs-{$size}
+      margin-top: $cs[$size] !important
+
+    .mb-cs-{$size}
+      margin-bottom: $cs[$size] !important
+
+    .ml-cs-{$size}
+      margin-left: $cs[$size] !important
+
+    .mr-cs-{$size}
+      margin-right: $cs[$size] !important
+
+  for $size in 'xxs' 'xs' 's' 'l' 'm' 'l' 'xl' 'xxl'
+    .mt-ls-{$size}
+      margin-top: $ls[$size] !important
+
+    .mb-ls-{$size}
+      margin-bottom: $ls[$size] !important
+
+    .ml-ls-{$size}
+      margin-left: $ls[$size] !important
+
+    .mr-ls-{$size}
+      margin-right: $ls[$size] !important
+
+  .panel-title
+    padding-bottom: $cs.xs
+    border-bottom: 1px solid $c-divider

@@ -1,0 +1,29 @@
+
+
+.container
+  display: flex
+  justify-content: space-between
+  align-items: center
+  flex-wrap: wrap
+  margin: $ls.s 0 $ls.xxs
+
+.content
+  display: flex
+  align-items: center
+  flex-wrap: wrap
+  width: 100%
+
+.creation-date
+  one-liner()
+  color: $tc-subtle-gray
+
+  +media-query($bp.xxs)
+    padding-top: $cs.xs
+    flex-basis: 100%
+
+.bottom-bar
+  &, & > div
+    display: flex
+
+  width: 100%
+  justify-content: space-between

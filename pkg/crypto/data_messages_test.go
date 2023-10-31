@@ -1,0 +1,73 @@
+package crypto_test
+
+import (
+	"testing"
+
+	"github.com/smarty/assertions"
+	. "go.thethings.network/lorawan-stack/v3/pkg/crypto"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+)
+
+func TestUplinkDownlinkEncryption(t *testing.T) {
+	a := assertions.New(t)
+
+	key := types.AES128Key{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	addr := types.DevAddr{1, 2, 3, 4}
+	frameIdentifier := [4]byte{0x00, 0x00, 0x00, 0x01}
+
+	var res []byte
+
+	// FRM Payload
+	res, _ = EncryptUplink(key, addr, 1, []byte{1, 2, 3, 4})
+	a.So(res, should.Resemble, []byte{0xCF, 0xF3, 0x0B, 0x4E})
+	res, _ = DecryptUplink(key, addr, 1, []byte{0xCF, 0xF3, 0x0B, 0x4E})
+	a.So(res, should.Resemble, []byte{1, 2, 3, 4})
+
+	res, _ = EncryptDownlink(key, addr, 1, []byte{1, 2, 3, 4})
+	a.So(res, should.Resemble, []byte{0x4E, 0x75, 0xF4, 0x40})
+	res, _ = DecryptDownlink(key, addr, 1, []byte{0x4E, 0x75, 0xF4, 0x40})
+	a.So(res, should.Resemble, []byte{1, 2, 3, 4})
+
+	// FOpts
+	res, _ = EncryptUplink(key, addr, 1, []byte{1, 2, 3, 4}, WithFrameTypeConstant(frameIdentifier))
+	a.So(res, should.Resemble, []byte{0x23, 0x61, 0x5F, 0x18})
+	res, _ = DecryptUplink(key, addr, 1, []byte{0x23, 0x61, 0x5F, 0x18}, WithFrameTypeConstant(frameIdentifier))
+	a.So(res, should.Resemble, []byte{1, 2, 3, 4})
+
+	res, _ = EncryptDownlink(key, addr, 1, []byte{1, 2, 3, 4}, WithFrameTypeConstant(frameIdentifier))
+	a.So(res, should.Resemble, []byte{0xB2, 0xDB, 0xE3, 0x91})
+	res, _ = DecryptDownlink(key, addr, 1, []byte{0xB2, 0xDB, 0xE3, 0x91}, WithFrameTypeConstant(frameIdentifier))
+	a.So(res, should.Resemble, []byte{1, 2, 3, 4})
+}
+
+func TestUplinkDownlinkMIC(t *testing.T) {
+	a := assertions.New(t)
+
+	key := types.AES128Key{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	addr := types.DevAddr{1, 2, 3, 4}
+	payloadWithoutMIC := []byte{
+		0x40,                   // Unconfirmed Uplink
+		0x04, 0x03, 0x02, 0x01, // DevAddr 01020304
+		0x00,       // Empty FCtrl
+		0x01, 0x00, // FCnt 1
+		0x01,                   // FPort 1
+		0x01, 0x02, 0x03, 0x04, // Data
+	}
+
+	mic, err := ComputeLegacyUplinkMIC(key, addr, 1, payloadWithoutMIC)
+	a.So(err, should.BeNil)
+	a.So(mic, should.Equal, [4]byte{0x3B, 0x07, 0x31, 0x82})
+
+	mic, err = ComputeUplinkMIC(key, key, 0, 0, 0, addr, 1, payloadWithoutMIC)
+	a.So(err, should.BeNil)
+	a.So(mic, should.Equal, [4]byte{0x3B, 0x07, 0x3B, 0x07})
+
+	mic, err = ComputeLegacyDownlinkMIC(key, addr, 1, payloadWithoutMIC)
+	a.So(err, should.BeNil)
+	a.So(mic, should.Equal, [4]byte{0xA5, 0x60, 0x9F, 0xA9})
+
+	mic, err = ComputeDownlinkMIC(key, addr, 0, 1, payloadWithoutMIC)
+	a.So(err, should.BeNil)
+	a.So(mic, should.Equal, [4]byte{0xA5, 0x60, 0x9F, 0xA9})
+}

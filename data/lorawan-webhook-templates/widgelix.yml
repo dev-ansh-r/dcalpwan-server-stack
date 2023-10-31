@@ -1,0 +1,19 @@
+template-id: widgelix
+name: Widgelix
+description: Integrate with Widgelix
+logo-url: https://app.widgelix.com/cdn/app.widgelix.com/logo.png
+info-url: https://app.widgelix.com/
+documentation-url: https://docs.widgelix.com/
+fields:
+  - id: apiKey
+    name: API Key
+    description: Secure your connection with an API key
+    secret: false
+format: json
+headers:
+  Content-Type: application/json
+  Authorization: "Bearer {apiKey}"
+create-downlink-api-key: false
+base-url: https://app.widgelix.com/v1/input-node/ttn
+paths:
+  uplink-message: /

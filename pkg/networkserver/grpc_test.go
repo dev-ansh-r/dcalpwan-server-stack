@@ -1,0 +1,266 @@
+package networkserver_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/component"
+	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	. "go.thethings.network/lorawan-stack/v3/pkg/networkserver"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/types"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+)
+
+func TestGenerateDevAddr(t *testing.T) {
+	for _, tc := range []struct {
+		Name          string
+		NetID         types.NetID
+		DevAddrPrefix types.DevAddrPrefix
+	}{
+		{
+			Name:  "Prefix from NS NetID 1",
+			NetID: types.NetID{0x00, 0x00, 0x13},
+			DevAddrPrefix: types.DevAddrPrefix{
+				DevAddr: test.Must(types.NewDevAddr(types.NetID{0x00, 0x00, 0x13}, nil)),
+				Length:  uint8(32 - types.NwkAddrBits(types.NetID{0x00, 0x00, 0x13})),
+			},
+		},
+		{
+			Name:  "Prefix from NS NetID 2",
+			NetID: types.NetID{0x00, 0x00, 0x14},
+			DevAddrPrefix: types.DevAddrPrefix{
+				DevAddr: test.Must(types.NewDevAddr(types.NetID{0x00, 0x00, 0x14}, nil)),
+				Length:  uint8(32 - types.NwkAddrBits(types.NetID{0x00, 0x00, 0x14})),
+			},
+		},
+		{
+			Name:  "Prefix from NS NetID 3",
+			NetID: types.NetID{0x12, 0x34, 0x56},
+			DevAddrPrefix: types.DevAddrPrefix{
+				DevAddr: test.Must(types.NewDevAddr(types.NetID{0x12, 0x34, 0x56}, nil)),
+				Length:  uint8(32 - types.NwkAddrBits(types.NetID{0x12, 0x34, 0x56})),
+			},
+		},
+	} {
+		tc := tc
+		test.RunSubtest(t, test.SubtestConfig{
+			Name:     tc.Name,
+			Parallel: true,
+			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
+				ns, ctx, _, stop := StartTest(ctx, TestConfig{
+					NetworkServer: Config{
+						NetID: tc.NetID,
+					},
+					TaskStarter: StartTaskExclude(
+						DownlinkProcessTaskName,
+						DownlinkDispatchTaskName,
+					),
+					Component: component.Config{
+						ServiceBase: config.ServiceBase{
+							FrequencyPlans: config.FrequencyPlansConfig{
+								ConfigSource: "static",
+								Static:       test.StaticFrequencyPlans,
+							},
+						},
+					},
+				})
+				defer stop()
+
+				devAddr, err := ttnpb.NewNsClient(ns.LoopbackConn()).GenerateDevAddr(ctx, ttnpb.Empty)
+				if a.So(err, should.BeNil) {
+					devAddr := types.MustDevAddr(devAddr.DevAddr).OrZero()
+					a.So(devAddr.HasPrefix(tc.DevAddrPrefix), should.BeTrue)
+				}
+			},
+		})
+	}
+	totalAddresses1 := (65536.0 + 256.0 + 16777216.0)
+	totalAddresses2 := (16777216.0 + 65536.0 + 16777216.0)
+	for _, tc := range []struct {
+		Name            string
+		DevAddrPrefixes []types.DevAddrPrefix
+		Balance         []float64
+	}{
+		{
+			Name: "Defined DevAddrPrefixes Set 1",
+			DevAddrPrefixes: []types.DevAddrPrefix{
+				{
+					DevAddr: types.DevAddr{0x26, 0x01, 0x00, 0x00},
+					Length:  16,
+				},
+				{
+					DevAddr: types.DevAddr{0x26, 0xff, 0x01, 0x00},
+					Length:  24,
+				},
+				{
+					DevAddr: types.DevAddr{0x27, 0x00, 0x00, 0x00},
+					Length:  8,
+				},
+			},
+			Balance: []float64{
+				1.0 - 256.0/totalAddresses1 - 16777216.0/totalAddresses1,
+				1.0 - 65536.0/totalAddresses1 - 16777216.0/totalAddresses1,
+				1.0 - 256.0/totalAddresses1 - 65536.0/totalAddresses1,
+			},
+		},
+		{
+			Name: "Defined DevAddrPrefixes Set 2",
+			DevAddrPrefixes: []types.DevAddrPrefix{
+				{
+					DevAddr: types.DevAddr{0x1f, 0x00, 0x00, 0x00},
+					Length:  8,
+				},
+				{
+					DevAddr: types.DevAddr{0xff, 0xff, 0x00, 0x00},
+					Length:  16,
+				},
+				{
+					DevAddr: types.DevAddr{0x27, 0x00, 0x00, 0x00},
+					Length:  8,
+				},
+			},
+			Balance: []float64{
+				1.0 - 65536.0/totalAddresses2 - 16777216.0/totalAddresses2,
+				1.0 - 16777216.0/totalAddresses2 - 16777216.0/totalAddresses2,
+				1.0 - 65536.0/totalAddresses2 - 16777216.0/totalAddresses2,
+			},
+		},
+		{
+			Name: "Defined DevAddrPrefixes Set 3",
+			DevAddrPrefixes: []types.DevAddrPrefix{
+				{
+					DevAddr: types.DevAddr{0xff, 0xff, 0xff, 0x00},
+					Length:  24,
+				},
+				{
+					DevAddr: types.DevAddr{0x00, 0xff, 0xff, 0xff},
+					Length:  8,
+				},
+				{
+					DevAddr: types.DevAddr{0x27, 0x072, 0x00, 0x00},
+					Length:  16,
+				},
+			},
+			Balance: []float64{
+				1.0 - 65536.0/totalAddresses1 - 16777216.0/totalAddresses1,
+				1.0 - 256.0/totalAddresses1 - 65536.0/totalAddresses1,
+				1.0 - 256.0/totalAddresses1 - 16777216.0/totalAddresses1,
+			},
+		},
+	} {
+		tc := tc
+		test.RunSubtest(t, test.SubtestConfig{
+			Name:     tc.Name,
+			Parallel: true,
+			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
+				ns, ctx, _, stop := StartTest(ctx, TestConfig{
+					NetworkServer: Config{
+						NetID:           types.NetID{0x00, 0x00, 0x13},
+						DevAddrPrefixes: tc.DevAddrPrefixes,
+					},
+					TaskStarter: StartTaskExclude(
+						DownlinkProcessTaskName,
+						DownlinkDispatchTaskName,
+					),
+					Component: component.Config{
+						ServiceBase: config.ServiceBase{
+							FrequencyPlans: config.FrequencyPlansConfig{
+								ConfigSource: "static",
+								Static:       test.StaticFrequencyPlans,
+							},
+						},
+					},
+				})
+				defer stop()
+
+				hasOneOfPrefixes := func(
+					devAddr *types.DevAddr, seen map[types.DevAddrPrefix]float64, prefixes ...types.DevAddrPrefix,
+				) bool {
+					for i, p := range prefixes {
+						if devAddr.HasPrefix(p) {
+							seen[prefixes[i]]++
+							return true
+						}
+					}
+					return false
+				}
+
+				seen, total := map[types.DevAddrPrefix]float64{}, float64(0)
+				for i := 0; i < 1000; i++ {
+					devAddr, err := ttnpb.NewNsClient(ns.LoopbackConn()).GenerateDevAddr(ctx, ttnpb.Empty)
+					if a.So(err, should.BeNil) {
+						devAddr := types.MustDevAddr(devAddr.DevAddr)
+						a.So(hasOneOfPrefixes(devAddr,
+							seen,
+							tc.DevAddrPrefixes[0],
+							tc.DevAddrPrefixes[1],
+							tc.DevAddrPrefixes[2],
+						), should.BeTrue)
+						total++
+					}
+				}
+				a.So(seen[tc.DevAddrPrefixes[0]]/total, should.AlmostEqual, tc.Balance[0], 0.1)
+				a.So(seen[tc.DevAddrPrefixes[1]]/total, should.AlmostEqual, tc.Balance[1], 0.1)
+				a.So(seen[tc.DevAddrPrefixes[2]]/total, should.AlmostEqual, tc.Balance[2], 0.1)
+			},
+		})
+	}
+}
+
+func TestGetDefaultMACSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		assertion func(err error) bool
+		req       *ttnpb.GetDefaultMACSettingsRequest
+	}{
+		{
+			name:      "NoFrequencyPlanID",
+			assertion: errors.IsNotFound,
+			req:       &ttnpb.GetDefaultMACSettingsRequest{},
+		},
+		{
+			name:      "NoLoRaWANVersion",
+			assertion: errors.IsInvalidArgument,
+			req: &ttnpb.GetDefaultMACSettingsRequest{
+				FrequencyPlanId: "EU_863_870",
+			},
+		},
+		{
+			name:      "OK",
+			assertion: func(err error) bool { return err == nil },
+			req: &ttnpb.GetDefaultMACSettingsRequest{
+				FrequencyPlanId:   "EU_863_870",
+				LorawanPhyVersion: ttnpb.PHYVersion_RP001_V1_0_2_REV_B,
+			},
+		},
+	} {
+		tc := tc
+		test.RunSubtest(t, test.SubtestConfig{
+			Name:     tc.name,
+			Parallel: true,
+			Func: func(ctx context.Context, t *testing.T, a *assertions.Assertion) {
+				ns, _, _, stop := StartTest(ctx, TestConfig{
+					Component: component.Config{
+						ServiceBase: config.ServiceBase{
+							FrequencyPlans: config.FrequencyPlansConfig{
+								ConfigSource: "static",
+								Static:       test.StaticFrequencyPlans,
+							},
+						},
+					},
+				})
+				defer stop()
+				settings, err := ttnpb.NewNsClient(ns.LoopbackConn()).GetDefaultMACSettings(test.Context(), tc.req)
+				if tc.assertion != nil {
+					a.So(tc.assertion(err), should.BeTrue)
+				} else {
+					a.So(settings, should.NotBeNil)
+				}
+			},
+		})
+	}
+}

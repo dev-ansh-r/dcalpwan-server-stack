@@ -1,0 +1,176 @@
+package component_test
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
+	"net/http"
+	"os"
+	"testing"
+
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/component"
+	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	"go.thethings.network/lorawan-stack/v3/pkg/config/tlsconfig"
+	"go.thethings.network/lorawan-stack/v3/pkg/interop"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+)
+
+type mockInterop struct{}
+
+func (m mockInterop) RegisterInterop(s *interop.Server) {
+	s.RegisterJS(m)
+}
+
+func (m mockInterop) JoinRequest(ctx context.Context, req *interop.JoinReq) (*interop.JoinAns, error) {
+	ansHeader, err := req.AnswerHeader()
+	if err != nil {
+		return nil, err
+	}
+	return &interop.JoinAns{
+		JsNsMessageHeader: interop.JsNsMessageHeader{
+			MessageHeader: ansHeader,
+			SenderID:      req.ReceiverID,
+			ReceiverID:    req.SenderID,
+		},
+		Result: interop.Result{
+			ResultCode: interop.ResultSuccess,
+		},
+	}, nil
+}
+
+func (m mockInterop) AppSKeyRequest(ctx context.Context, req *interop.AppSKeyReq) (*interop.AppSKeyAns, error) {
+	ansHeader, err := req.AnswerHeader()
+	if err != nil {
+		return nil, err
+	}
+	return &interop.AppSKeyAns{
+		JsAsMessageHeader: interop.JsAsMessageHeader{
+			MessageHeader: ansHeader,
+			SenderID:      req.ReceiverID,
+			ReceiverID:    req.SenderID,
+		},
+		Result: interop.Result{
+			ResultCode: interop.ResultSuccess,
+		},
+	}, nil
+}
+
+func (m mockInterop) HomeNSRequest(ctx context.Context, req *interop.HomeNSReq) (*interop.TTIHomeNSAns, error) {
+	ansHeader, err := req.AnswerHeader()
+	if err != nil {
+		return nil, err
+	}
+	return &interop.TTIHomeNSAns{
+		HomeNSAns: interop.HomeNSAns{
+			JsNsMessageHeader: interop.JsNsMessageHeader{
+				MessageHeader: ansHeader,
+				SenderID:      req.ReceiverID,
+				ReceiverID:    req.SenderID,
+			},
+			Result: interop.Result{
+				ResultCode: interop.ResultSuccess,
+			},
+		},
+	}, nil
+}
+
+func TestInteropTLS(t *testing.T) {
+	a := assertions.New(t)
+
+	config := &component.Config{
+		ServiceBase: config.ServiceBase{
+			TLS: tlsconfig.Config{
+				ServerAuth: tlsconfig.ServerAuth{
+					Certificate: "testdata/servercert.pem",
+					Key:         "testdata/serverkey.pem",
+				},
+				Client: tlsconfig.Client{
+					RootCA: "testdata/serverca.pem",
+				},
+			},
+			Interop: config.InteropServer{
+				ListenTLS: ":9188",
+				SenderClientCA: config.SenderClientCA{
+					Source:    "directory",
+					Directory: "testdata",
+				},
+			},
+		},
+	}
+
+	mockInterop := &mockInterop{}
+	c := component.MustNew(test.GetLogger(t), config)
+	c.RegisterInterop(mockInterop)
+
+	test.Must[any](nil, c.Start())
+	defer c.Close()
+
+	certPool := x509.NewCertPool()
+	certContent, err := os.ReadFile("testdata/serverca.pem")
+	a.So(err, should.BeNil)
+	certPool.AppendCertsFromPEM(certContent)
+	client := http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: certPool,
+				GetClientCertificate: func(info *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					cert, err := tls.LoadX509KeyPair("testdata/clientcert.pem", "testdata/clientkey.pem")
+					if err != nil {
+						return nil, err
+					}
+					return &cert, nil
+				},
+			},
+		},
+	}
+
+	// Correct SenderID.
+	{
+		req := &interop.JoinReq{
+			NsJsMessageHeader: interop.NsJsMessageHeader{
+				MessageHeader: interop.MessageHeader{
+					MessageType:     interop.MessageTypeJoinReq,
+					ProtocolVersion: "1.0",
+				},
+				SenderID:   interop.NetID{0x0, 0x0, 0x1},
+				ReceiverID: interop.EUI64{0x42, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+			},
+			MACVersion: interop.MACVersion(ttnpb.MACVersion_MAC_V1_0_3),
+		}
+		buf, err := json.Marshal(req)
+		a.So(err, should.BeNil)
+		res, err := client.Post("https://localhost:9188", "application/json", bytes.NewReader(buf))
+		a.So(err, should.BeNil)
+		a.So(res.StatusCode, should.Equal, http.StatusOK)
+	}
+
+	// Wrong SenderID.
+	{
+		req := &interop.JoinReq{
+			NsJsMessageHeader: interop.NsJsMessageHeader{
+				MessageHeader: interop.MessageHeader{
+					MessageType:     interop.MessageTypeJoinReq,
+					ProtocolVersion: "1.0",
+				},
+				SenderID:   interop.NetID{0x0, 0x0, 0x2},
+				ReceiverID: interop.EUI64{0x42, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+			},
+			MACVersion: interop.MACVersion(ttnpb.MACVersion_MAC_V1_0_3),
+		}
+		buf, err := json.Marshal(req)
+		a.So(err, should.BeNil)
+		res, err := client.Post("https://localhost:9188", "application/json", bytes.NewReader(buf))
+		a.So(err, should.BeNil)
+		a.So(res.StatusCode, should.Equal, http.StatusOK)
+		var msg interop.ErrorMessage
+		if !a.So(json.NewDecoder(res.Body).Decode(&msg), should.BeNil) {
+			t.FailNow()
+		}
+		a.So(msg.Result.ResultCode, should.Resemble, interop.ResultUnknownSender)
+	}
+}

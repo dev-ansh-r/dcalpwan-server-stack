@@ -1,0 +1,63 @@
+name: JS Code
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/js.yml"
+      - "config/**"
+      - "!config/stack/ttn-lw-stack.yml"
+      - "Makefile"
+      - "package.json"
+      - "pkg/webui/**"
+      - "!pkg/webui/**.go"
+      - "sdk/js/**"
+      - "tools/**"
+      - "cypress/**"
+      - "yarn.lock"
+
+jobs:
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Install Node and Dependencies
+        uses: ./.github/actions/install-node-and-deps
+      - name: Generate JS SDK allowed field masks
+        run: tools/bin/mage jsSDK:allowedFieldMaskPaths jsSDK:deviceFieldMasks
+      - name: Build JS SDK
+        run: tools/bin/mage jsSDK:clean jsSDK:build
+      - name: Generate JS translations
+        run: tools/bin/mage js:translations js:backendTranslations
+      - name: Lint JS SDK code
+        run: tools/bin/mage -v jsSDK:lint
+      - name: Lint frontend code
+        run: tools/bin/mage -v js:lint
+      - name: Check for diff
+        run: tools/bin/mage git:diff
+
+  test:
+    name: Tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Install Node and Dependencies
+        uses: ./.github/actions/install-node-and-deps
+      - name: Test JS SDK code
+        run: tools/bin/mage jsSDK:test
+      - name: Test frontend code
+        run: tools/bin/mage js:test
+      - name: Check for diff
+        run: tools/bin/mage git:diff

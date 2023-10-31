@@ -1,0 +1,49 @@
+
+
+.left
+  flex-basis: 65%
+  padding-right: $cs.m
+  overflow-y: scroll
+  border-normal('right')
+
+  +media-query($bp.s)
+    flex-basis: 100%
+    flex-grow: 0
+    margin-bottom: $ls.m
+    border: 0
+
+  h4
+    margin-top: 0
+
+  ul
+    text-margin-top()
+    padding-left: 0
+
+  li
+    display: flex
+    align-items: flex-start
+
+  li > span
+    nudge('down', 3px)
+    color: $c-info
+    margin-right: $cs.xxs
+
+  .right-name
+    color: $tc-deep-gray
+
+.right
+  .secret-inspector
+    width: 15rem
+
+  .description
+    margin: 0
+
+  +media-query($bp.s)
+    flex-grow: 0
+
+    .secret-inspector
+      width: 100%
+
+  +media-query-min($bp.s)
+    flex-basis: 35%
+    padding-left: 3rem

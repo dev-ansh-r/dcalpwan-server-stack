@@ -1,0 +1,46 @@
+
+
+.cell
+  display: table-cell
+  padding: $cs.m
+  vertical-align: middle
+
+  +media-query($bp.s)
+    padding: $cs.m $cs.xs
+
+  &:first-child, &:last-child
+    padding-right: $cs.s
+
+  &:first-child
+    font-weight: $fw.bold
+
+  &:not(&-centered):not(&-left)
+    &:last-child
+      text-align: right
+
+  &-small
+    padding-top: $cs.xs
+    padding-bottom: $cs.xs
+
+  &-centered
+    text-align: center
+
+  &-left
+    text-align: left
+
+  &-right
+    text-align: right
+
+  &-head
+    font-weight: normal
+    font-size: $fs.s
+    color: $tc-subtle-gray
+
+  &-data
+    white-space: nowrap
+    overflow: hidden
+    text-overflow: ellipsis
+
+
+  &-head:not(&-centered):not(&-right)
+    text-align: left

@@ -1,0 +1,137 @@
+package fetch_test
+
+import (
+	"testing"
+
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/fetch"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"golang.org/x/exp/slices"
+)
+
+type MockInterface struct {
+	FileFunc func(...string) ([]byte, error)
+}
+
+func (m MockInterface) File(pathElements ...string) ([]byte, error) {
+	if m.FileFunc == nil {
+		panic("File called, but not set")
+	}
+	return m.FileFunc(pathElements...)
+}
+
+func TestWithBasePath(t *testing.T) {
+	for _, tc := range []struct {
+		Name           string
+		BasePath, Path []string
+		Error          error
+		Bytes          []byte
+		AssertPath     func(*testing.T, ...string) bool
+		AssertError    func(*testing.T, error) bool
+		AssertBytes    func(*testing.T, []byte) bool
+	}{
+		{
+			Name: "empty base path/empty path",
+			AssertPath: func(t *testing.T, pathElements ...string) bool {
+				return assertions.New(t).So(pathElements, should.BeEmpty)
+			},
+			AssertError: func(t *testing.T, err error) bool {
+				return assertions.New(t).So(err, should.BeError)
+			},
+			AssertBytes: func(t *testing.T, b []byte) bool {
+				return assertions.New(t).So(b, should.BeNil)
+			},
+		},
+		{
+			Name:  "empty base path/path [foo bar baz]",
+			Path:  []string{"foo", "bar", "baz"},
+			Bytes: []byte{0x42, 0x41},
+			AssertPath: func(t *testing.T, pathElements ...string) bool {
+				return assertions.New(t).So(pathElements, should.Resemble, []string{"foo", "bar", "baz"})
+			},
+			AssertError: func(t *testing.T, err error) bool {
+				return assertions.New(t).So(err, should.BeNil)
+			},
+			AssertBytes: func(t *testing.T, b []byte) bool {
+				return assertions.New(t).So(b, should.Resemble, []byte{0x42, 0x41})
+			},
+		},
+		{
+			Name:  "empty base path/path [/foo bar baz]",
+			Path:  []string{"/foo", "bar", "baz"},
+			Bytes: []byte{0x42, 0x41},
+			AssertPath: func(t *testing.T, pathElements ...string) bool {
+				return assertions.New(t).So(pathElements, should.Resemble, []string{"/foo", "bar", "baz"})
+			},
+			AssertError: func(t *testing.T, err error) bool {
+				return assertions.New(t).So(err, should.BeNil)
+			},
+			AssertBytes: func(t *testing.T, b []byte) bool {
+				return assertions.New(t).So(b, should.Resemble, []byte{0x42, 0x41})
+			},
+		},
+		{
+			Name:     "base [foo bar baz]/empty path",
+			BasePath: []string{"foo", "bar", "baz"},
+			AssertPath: func(t *testing.T, pathElements ...string) bool {
+				return assertions.New(t).So(pathElements, should.Resemble, []string{"foo", "bar", "baz"})
+			},
+			AssertError: func(t *testing.T, err error) bool {
+				return assertions.New(t).So(err, should.BeError)
+			},
+			AssertBytes: func(t *testing.T, b []byte) bool {
+				return assertions.New(t).So(b, should.BeNil)
+			},
+		},
+		{
+			Name:     "base [foo bar baz]/path [42 baz bar foo]",
+			BasePath: []string{"foo", "bar", "baz"},
+			Path:     []string{"42", "baz", "bar", "foo"},
+			Bytes:    []byte{0x42, 0x41},
+			AssertPath: func(t *testing.T, pathElements ...string) bool {
+				return assertions.New(t).So(pathElements, should.Resemble, []string{"foo", "bar", "baz", "42", "baz", "bar", "foo"})
+			},
+			AssertError: func(t *testing.T, err error) bool {
+				return assertions.New(t).So(err, should.BeNil)
+			},
+			AssertBytes: func(t *testing.T, b []byte) bool {
+				return assertions.New(t).So(b, should.Resemble, []byte{0x42, 0x41})
+			},
+		},
+		{
+			Name:     "base [foo bar baz]/path [/42 baz bar foo]",
+			BasePath: []string{"foo", "bar", "baz"},
+			Path:     []string{"/42", "baz", "bar", "foo"},
+			Bytes:    []byte{0x42, 0x41},
+			AssertPath: func(t *testing.T, pathElements ...string) bool {
+				return assertions.New(t).So(pathElements, should.Resemble, []string{"/42", "baz", "bar", "foo"})
+			},
+			AssertError: func(t *testing.T, err error) bool {
+				return assertions.New(t).So(err, should.BeNil)
+			},
+			AssertBytes: func(t *testing.T, b []byte) bool {
+				return assertions.New(t).So(b, should.Resemble, []byte{0x42, 0x41})
+			},
+		},
+	} {
+		t.Run(tc.Name, func(t *testing.T) {
+			a := assertions.New(t)
+
+			m := MockInterface{
+				FileFunc: func(pathElements ...string) ([]byte, error) {
+					a.So(tc.AssertPath(t, pathElements...), should.BeTrue)
+					return tc.Bytes, tc.Error
+				},
+			}
+
+			basePath := slices.Clone(tc.BasePath)
+			path := slices.Clone(tc.Path)
+			b, err := fetch.WithBasePath(m, basePath...).File(path...)
+			if a.So(tc.AssertError(t, err), should.BeTrue) {
+				a.So(tc.AssertBytes(t, b), should.BeTrue)
+			}
+			a.So(basePath, should.Resemble, tc.BasePath)
+			a.So(path, should.Resemble, tc.Path)
+		})
+	}
+}

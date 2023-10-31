@@ -1,0 +1,285 @@
+package types_test
+
+import (
+	"encoding/json"
+	"fmt"
+	"testing"
+
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/config"
+	. "go.thethings.network/lorawan-stack/v3/pkg/types"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+)
+
+var (
+	_ config.Configurable = &DevAddrPrefix{}
+	_ config.Stringer     = DevAddrPrefix{}
+)
+
+func TestDevAddr(t *testing.T) {
+	for _, tc := range []struct {
+		DevAddr       DevAddr
+		NetIDType     byte
+		NetID         NetID
+		NwkAddr       []byte
+		NwkAddrBits   uint
+		NwkAddrLength int
+	}{
+		{
+			DevAddr{0x3e, 0xff, 0xff, 0x42},
+			0,
+			NetID{0x00, 0x00, 0x1f},
+			[]byte{0x00, 0xff, 0xff, 0x42},
+			25,
+			4,
+		},
+		{
+			DevAddr{0x9f, 0xff, 0xff, 0x42},
+			1,
+			NetID{0x20, 0x00, 0x1f},
+			[]byte{0xff, 0xff, 0x42},
+			24,
+			3,
+		},
+		{
+			DevAddr{0xcf, 0xff, 0xff, 0x42},
+			2,
+			NetID{0x40, 0x00, 0xff},
+			[]byte{0x0f, 0xff, 0x42},
+			20,
+			3,
+		},
+		{
+			DevAddr{0xe3, 0xfc, 0xff, 0x42},
+			3,
+			NetID{0x60, 0x01, 0xfe},
+			[]byte{0x00, 0xff, 0x42},
+			17,
+			3,
+		},
+		{
+			DevAddr{0xf0, 0xff, 0xff, 0x42},
+			4,
+			NetID{0x80, 0x01, 0xff},
+			[]byte{0x7f, 0x42},
+			15,
+			2,
+		},
+		{
+			DevAddr{0xf8, 0x1f, 0xff, 0x42},
+			5,
+			NetID{0xa0, 0x00, 0xff},
+			[]byte{0x1f, 0x42},
+			13,
+			2,
+		},
+		{
+			DevAddr{0xfc, 0x03, 0xff, 0x42},
+			6,
+			NetID{0xc0, 0x00, 0xff},
+			[]byte{0x03, 0x42},
+			10,
+			2,
+		},
+		{
+			DevAddr{0xfe, 0xff, 0xff, 0xc2},
+			7,
+			NetID{0xe1, 0xff, 0xff},
+			[]byte{0x42},
+			7,
+			1,
+		},
+	} {
+		t.Run(string(tc.NetIDType+'0'), func(t *testing.T) {
+			a := assertions.New(t)
+
+			netID, ok := tc.DevAddr.NetID()
+			a.So(ok, should.BeTrue)
+			a.So(netID, should.Resemble, tc.NetID)
+			a.So(NwkAddrBits(netID), should.Equal, tc.NwkAddrBits)
+			a.So(NwkAddrLength(netID), should.Equal, tc.NwkAddrLength)
+
+			devAddr, err := NewDevAddr(netID, tc.NwkAddr)
+			a.So(err, should.BeNil)
+			if !a.So(devAddr, should.Equal, tc.DevAddr) {
+				return
+			}
+
+			netIDType, ok := devAddr.NetIDType()
+			a.So(ok, should.BeTrue)
+			a.So(netIDType, should.Equal, tc.NetIDType)
+			nwkAddr, ok := devAddr.NwkAddr()
+			a.So(ok, should.BeTrue)
+			a.So(nwkAddr, should.Resemble, tc.NwkAddr)
+		})
+	}
+}
+
+func TestDevAddrPrefix(t *testing.T) {
+	a := assertions.New(t)
+
+	devAddr := DevAddr{0x26, 0x12, 0x34, 0x56}
+	prefix := DevAddrPrefix{DevAddr{0x26}, 7}
+	a.So(prefix.Matches(devAddr), should.BeTrue)
+
+	// HasPrefix
+	{
+		devAddr = DevAddr{1, 2, 3, 4}
+		a.So(devAddr.HasPrefix(DevAddrPrefix{DevAddr{0, 0, 0, 0}, 0}), should.BeTrue)
+		a.So(devAddr.HasPrefix(DevAddrPrefix{DevAddr{1, 2, 3, 0}, 24}), should.BeTrue)
+		a.So(devAddr.HasPrefix(DevAddrPrefix{DevAddr{2, 2, 3, 4}, 31}), should.BeFalse)
+		a.So(devAddr.HasPrefix(DevAddrPrefix{DevAddr{1, 1, 3, 4}, 31}), should.BeFalse)
+		a.So(devAddr.HasPrefix(DevAddrPrefix{DevAddr{1, 1, 1, 1}, 15}), should.BeFalse)
+	}
+
+	// JSON marshalling
+	{
+		content, err := json.Marshal(prefix)
+		if !a.So(err, should.BeNil) {
+			panic(err)
+		}
+
+		strContent := string(content)
+		a.So(strContent, should.ContainSubstring, "26000000/7")
+	}
+
+	// JSON unmarshalling
+	{
+		strContent := `"26000000/7"`
+		err := json.Unmarshal([]byte(strContent), &prefix)
+		if !a.So(err, should.BeNil) {
+			panic(err)
+		}
+
+		a.So(prefix, should.Equal, DevAddrPrefix{DevAddr{0x26}, 7})
+	}
+}
+
+func ExampleDevAddr_MarshalText() {
+	devAddr := DevAddr{0x26, 0x01, 0x26, 0xB4}
+	text, err := devAddr.MarshalText()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(string(text))
+	// Output: 260126B4
+}
+
+func ExampleDevAddr_UnmarshalText() {
+	var devAddr DevAddr
+	err := devAddr.UnmarshalText([]byte("2601A3C2"))
+	if err != nil {
+		panic(err)
+	}
+
+	devAddr2 := DevAddr{0x26, 0x01, 0xa3, 0xc2}
+	fmt.Println(devAddr == devAddr2)
+	// Output: true
+}
+
+func ExampleDevAddr_Mask() {
+	devAddr := DevAddr{0x26, 0x01, 0x26, 0xB4}
+	devAddrMasked := devAddr.Mask(16)
+	devAddr2 := DevAddr{0x26, 0x01, 0x00, 0x00}
+
+	fmt.Println(devAddrMasked == devAddr2)
+	// Output: true
+}
+
+func ExampleDevAddr_NetID() {
+	devAddr := DevAddr{0x26, 0x01, 0x26, 0xB4}
+	netID, ok := devAddr.NetID()
+	if ok {
+		fmt.Printf("%#x", netID[:])
+	}
+	// Output: 0x000013
+}
+
+func ExampleDevAddrPrefix_Matches() {
+	devAddr := DevAddr{0x26, 0x00, 0x26, 0xB4}
+	devAddr2 := DevAddr{0x26, 0x2a, 0x26, 0x8e}
+	devAddrPrefix := DevAddrPrefix{
+		DevAddr: DevAddr{0x26, 0x00, 0x00, 0x00},
+		Length:  16,
+	}
+	fmt.Println(devAddrPrefix.Matches(devAddr))
+	fmt.Println(devAddrPrefix.Matches(devAddr2))
+	// Output:
+	// true
+	// false
+}
+
+func TestDevAddrPrefix_UnmarshalText(t *testing.T) {
+	a := assertions.New(t)
+
+	var prefix DevAddrPrefix
+
+	err := prefix.UnmarshalText([]byte("26000000/7"))
+	a.So(err, should.BeNil)
+	a.So(prefix.DevAddr, should.Equal, DevAddr{0x26, 0x00, 0x00, 0x00})
+	a.So(prefix.Length, should.Equal, 7)
+
+	err = prefix.UnmarshalText([]byte("27000000/0"))
+	a.So(err, should.BeNil)
+	a.So(prefix.DevAddr, should.Equal, DevAddr{0x27, 0x00, 0x00, 0x00})
+	a.So(prefix.Length, should.Equal, 0)
+
+	err = prefix.UnmarshalText([]byte("27000000/32"))
+	a.So(err, should.BeNil)
+	a.So(prefix.DevAddr, should.Equal, DevAddr{0x27, 0x00, 0x00, 0x00})
+	a.So(prefix.Length, should.Equal, 32)
+
+	err = prefix.UnmarshalText([]byte("01000000/7"))
+	a.So(err, should.BeNil)
+	a.So(prefix.DevAddr, should.Equal, DevAddr{0x01, 0x00, 0x00, 0x00})
+	a.So(prefix.Length, should.Equal, 7)
+}
+
+func TestDevAddrPrefix_UnmarshalConfigString(t *testing.T) {
+	a := assertions.New(t)
+
+	var prefix DevAddrPrefix
+
+	err := prefix.UnmarshalText([]byte("26000000/7"))
+	a.So(err, should.BeNil)
+	a.So(prefix.DevAddr, should.Equal, DevAddr{0x26, 0x00, 0x00, 0x00})
+	a.So(prefix.Length, should.Equal, 7)
+
+	err = prefix.UnmarshalText([]byte("27000000/0"))
+	a.So(err, should.BeNil)
+	a.So(prefix.DevAddr, should.Equal, DevAddr{0x27, 0x00, 0x00, 0x00})
+	a.So(prefix.Length, should.Equal, 0)
+
+	err = prefix.UnmarshalText([]byte("27000000/32"))
+	a.So(err, should.BeNil)
+	a.So(prefix.DevAddr, should.Equal, DevAddr{0x27, 0x00, 0x00, 0x00})
+	a.So(prefix.Length, should.Equal, 32)
+
+	err = prefix.UnmarshalText([]byte("01000000/7"))
+	a.So(err, should.BeNil)
+	a.So(prefix.DevAddr, should.Equal, DevAddr{0x01, 0x00, 0x00, 0x00})
+	a.So(prefix.Length, should.Equal, 7)
+}
+
+func TestDevAddr_number(t *testing.T) {
+	a := assertions.New(t)
+
+	var addr1 DevAddr
+	err := addr1.UnmarshalText([]byte("26000000"))
+	a.So(err, should.BeNil)
+	a.So(addr1.MarshalNumber(), should.Equal, 637534208)
+
+	var addr2 DevAddr
+	err = addr2.UnmarshalText([]byte("27000000"))
+	a.So(err, should.BeNil)
+	a.So(addr2.MarshalNumber(), should.Equal, 654311424)
+
+	var addr3 DevAddr
+	addr3.UnmarshalNumber(654311424)
+	a.So(addr3, should.Equal, addr2)
+
+	var addr4 DevAddr
+	addr4.UnmarshalNumber(637534208)
+	a.So(addr4, should.Equal, addr1)
+}

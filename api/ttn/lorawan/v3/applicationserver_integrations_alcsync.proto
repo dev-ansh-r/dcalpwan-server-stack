@@ -1,0 +1,43 @@
+
+
+syntax = "proto3";
+
+package ttn.lorawan.v3;
+
+import "google/protobuf/timestamp.proto";
+import "thethings/json/annotations.proto";
+import "validate/validate.proto";
+
+option go_package = "go.thethings.network/lorawan-stack/v3/pkg/ttnpb";
+
+enum ALCSyncCommandIdentifier {
+  option (thethings.json.enum) = {
+    marshal_as_string: true,
+    prefix: "ALCSYNC_CID"
+  };
+
+  ALCSYNC_CID_PKG_VERSION = 0;
+  ALCSYNC_CID_APP_TIME = 1;
+  ALCSYNC_CID_APP_DEV_TIME_PERIODICITY = 2;
+  ALCSYNC_CID_FORCE_DEV_RESYNC = 3;
+}
+
+message ALCSyncCommand {
+  ALCSyncCommandIdentifier cid = 1 [(validate.rules).enum = {defined_only: true}];
+
+  oneof payload {
+    AppTimeReq app_time_req = 2;
+    AppTimeAns app_time_ans = 3;
+  }
+
+  message AppTimeReq {
+    google.protobuf.Timestamp DeviceTime = 1 [(validate.rules).timestamp.required = true];
+    uint32 TokenReq = 2 [(validate.rules).uint32.lte = 255];
+    bool AnsRequired = 3;
+  }
+
+  message AppTimeAns {
+    int32 TimeCorrection = 1;
+    uint32 TokenAns = 2 [(validate.rules).uint32.lte = 255];
+  }
+}

@@ -1,0 +1,113 @@
+package mac
+
+import (
+	"fmt"
+	"unicode"
+
+	"go.thethings.network/lorawan-stack/v3/pkg/events"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+)
+
+func macEventOptions(extraOpts ...events.Option) []events.Option {
+	return append([]events.Option{events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ)}, extraOpts...)
+}
+
+func defineReceiveMACAcceptEvent(name, desc string, opts ...events.Option) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.mac.%s.answer.accept", name), fmt.Sprintf("%s accept received", desc),
+		macEventOptions(opts...)...,
+	)
+}
+
+func defineReceiveMACAnswerEvent(name, desc string, opts ...events.Option) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.mac.%s.answer", name), fmt.Sprintf("%s answer received", desc),
+		macEventOptions(opts...)...,
+	)
+}
+
+func defineReceiveMACIndicationEvent(name, desc string, opts ...events.Option) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.mac.%s.indication", name), fmt.Sprintf("%s indication received", desc),
+		macEventOptions(opts...)...,
+	)
+}
+
+func defineReceiveMACRejectEvent(name, desc string, opts ...events.Option) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.mac.%s.answer.reject", name), fmt.Sprintf("%s rejection received", desc),
+		macEventOptions(opts...)...,
+	)
+}
+
+func defineReceiveMACRequestEvent(name, desc string, opts ...events.Option) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.mac.%s.request", name), fmt.Sprintf("%s request received", desc),
+		macEventOptions(opts...)...,
+	)
+}
+
+func defineEnqueueMACAnswerEvent(name, desc string, opts ...events.Option) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.mac.%s.answer", name), fmt.Sprintf("%s answer enqueued", desc),
+		macEventOptions(opts...)...,
+	)
+}
+
+func defineEnqueueMACConfirmationEvent(name, desc string, opts ...events.Option) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.mac.%s.confirmation", name), fmt.Sprintf("%s confirmation enqueued", desc),
+		macEventOptions(opts...)...,
+	)
+}
+
+func defineEnqueueMACRequestEvent(name, desc string, opts ...events.Option) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.mac.%s.request", name), fmt.Sprintf("%s request enqueued", desc),
+		macEventOptions(opts...)...,
+	)
+}
+
+func defineClassSwitchEvent(class rune) func() events.Builder {
+	return events.DefineFunc(
+		fmt.Sprintf("ns.class.switch.%c", class), fmt.Sprintf("switched to class %c", unicode.ToUpper(class)),
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithPropagateToParent(),
+	)
+}
+
+var (
+	EvtEnqueueProprietaryMACAnswer  = defineEnqueueMACAnswerEvent("proprietary", "proprietary MAC command")
+	EvtEnqueueProprietaryMACRequest = defineEnqueueMACRequestEvent("proprietary", "proprietary MAC command")
+	EvtReceiveProprietaryMAC        = events.Define(
+		"ns.mac.proprietary.receive", "receive proprietary MAC command",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+	)
+
+	EvtClassASwitch = defineClassSwitchEvent('a')()
+	EvtClassBSwitch = defineClassSwitchEvent('b')()
+	EvtClassCSwitch = defineClassSwitchEvent('c')()
+
+	EvtParseMACCommandFail = events.Define(
+		"ns.mac.command.parse.fail", "parse MAC command",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithErrorDataType(),
+		events.WithPropagateToParent(),
+	)
+	EvtUnknownMACCommand = events.Define(
+		"ns.mac.command.unknown", "unknown MAC command",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithDataType(&ttnpb.MACCommand{}),
+	)
+	EvtProcessMACCommandFail = events.Define(
+		"ns.mac.command.process.fail", "process MAC command",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithErrorDataType(),
+		events.WithPropagateToParent(),
+	)
+	EvtUnansweredMACCommand = events.Define(
+		"ns.mac.command.unanswered", "MAC command answer missing",
+		events.WithVisibility(ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ),
+		events.WithDataType(&ttnpb.MACCommands{}),
+	)
+)

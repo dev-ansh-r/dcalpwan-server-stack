@@ -1,0 +1,95 @@
+package events
+
+import (
+	"context"
+
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+type builder struct {
+	definition *definition
+	options    []Option
+}
+
+func (b *builder) Definition() Definition {
+	return b.definition
+}
+
+func (b *builder) With(options ...Option) Builder {
+	extended := &builder{
+		definition: b.definition,
+	}
+	extended.options = append(extended.options, b.options...)
+	extended.options = append(extended.options, options...)
+	return extended
+}
+
+func (b *builder) New(ctx context.Context, opts ...Option) Event {
+	evt := &event{
+		ctx: ctx,
+		innerEvent: &ttnpb.Event{
+			UniqueId:       NewCorrelationID(),
+			Name:           b.definition.name,
+			Time:           timestamppb.Now(),
+			Origin:         hostname,
+			CorrelationIds: CorrelationIDsFromContext(ctx),
+		},
+	}
+	for _, opt := range b.options {
+		opt.applyTo(evt)
+	}
+	for _, opt := range opts {
+		opt.applyTo(evt)
+	}
+	return evt
+}
+
+func (b *builder) NewWithIdentifiersAndData(ctx context.Context, ids EntityIdentifiers, data any) Event {
+	e := local(b.New(ctx))
+	if ids != nil {
+		e.innerEvent.Identifiers = append(e.innerEvent.Identifiers, ids.GetEntityIdentifiers())
+	}
+	if data != nil {
+		e.data = data
+	}
+	return e
+}
+
+func (b *builder) BindData(data any) Builder {
+	return b.With(WithData(data))
+}
+
+// Builder is the interface for building events from definitions.
+type Builder interface {
+	Definition() Definition
+
+	With(opts ...Option) Builder
+	New(ctx context.Context, opts ...Option) Event
+
+	// Convenience function for legacy code. Same as New(ctx, WithIdentifiers(ids), WithData(data)).
+	NewWithIdentifiersAndData(ctx context.Context, ids EntityIdentifiers, data any) Event
+	// Convenience function for legacy code. Same as With(WithData(data)).
+	BindData(data any) Builder
+}
+
+// Builders makes it easier to create multiple events at once.
+type Builders []Builder
+
+// New returns new events for each builder in the list.
+func (bs Builders) New(ctx context.Context, opts ...Option) []Event {
+	events := make([]Event, len(bs))
+	for i, b := range bs {
+		events[i] = b.New(ctx, opts...)
+	}
+	return events
+}
+
+// Definitions returns the definition for each builder in the list.
+func (bs Builders) Definitions() []Definition {
+	definitions := make([]Definition, len(bs))
+	for i, b := range bs {
+		definitions[i] = b.Definition()
+	}
+	return definitions
+}

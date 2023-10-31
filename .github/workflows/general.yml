@@ -1,0 +1,33 @@
+name: General
+
+on: pull_request
+
+jobs:
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Install Node and Dependencies
+        uses: ./.github/actions/install-node-and-deps
+      - name: Editor config
+        uses: snow-actions/eclint@v1.0.1
+        # TODO: Fix EditorConfig errors and remove
+        # https://github.com/TheThingsNetwork/lorawan-stack/issues/2723
+        continue-on-error: true
+      - name: Check headers
+        run: tools/bin/mage headers:check
+      - name: Fix common spelling mistakes
+        run: tools/bin/mage dev:misspell
+      - name: Format SQL files
+        run: tools/bin/mage sql:fmt
+      - name: Format proto files
+        run: tools/bin/mage proto:fmt
+      - name: Check for diff
+        run: tools/bin/mage git:diff

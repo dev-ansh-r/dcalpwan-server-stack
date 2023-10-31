@@ -1,0 +1,72 @@
+
+
+.wrapper
+  display: flex
+  flex-direction: column
+  height: 100%
+  min-height: 100vh
+
+.flex-wrapper
+  display: flex
+  flex: 1
+  position: relative
+
+.full-view-error
+  box-sizing: border-box
+  width: 100%
+  min-height: 30rem
+  padding-bottom: $ls.s
+  padding-left: 4rem
+  padding-right: 4rem
+  +media-query-min($bp.s)
+    padding-top: 20vh
+  +media-query($bp.s)
+    padding-top: $header-height-mobile + $ls.m
+
+  &-header
+    +media-query($bp.s)
+      font-size: $fs.l
+
+  &-sub
+    display: block
+
+  summary
+    color: $tc-subtle-gray
+
+  pre
+    width: 100%
+    box-sizing: border-box
+    background-color: $c-backdrop
+    color: $tc-black
+    font-size: $fs.s
+    overflow-y: auto
+    padding: $cs.s
+    max-height: 26rem
+    color: $tc-deep-gray
+
+.error-actions
+  display: flex
+  align-items: center
+  flex-wrap: wrap
+  margin-bottom: $cs.m
+  margin-top: $cs.m
+
+  & > span
+    color: $tc-subtle-gray
+
+.icon
+  nudge('up', .1rem)
+  color: $c-error
+  +media-query-min($bp.s)
+    font-size: 2rem
+  +media-query($bp.s)
+    font-size: 1.4rem
+
+.action-button
+  margin-right: $cs.m
+  padding-left: $cs.xs
+
+.detail-colophon
+  color: $tc-subtle-gray
+  span
+    display: block

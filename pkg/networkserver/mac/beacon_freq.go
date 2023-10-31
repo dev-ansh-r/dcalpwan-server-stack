@@ -1,0 +1,95 @@
+package mac
+
+import (
+	"context"
+
+	"go.thethings.network/lorawan-stack/v3/pkg/events"
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+)
+
+var (
+	EvtEnqueueBeaconFreqRequest = defineEnqueueMACRequestEvent(
+		"beacon_freq", "beacon frequency change",
+		events.WithDataType(&ttnpb.MACCommand_BeaconFreqReq{}),
+	)()
+	EvtReceiveBeaconFreqReject = defineReceiveMACRejectEvent(
+		"beacon_freq", "beacon frequency change",
+		events.WithDataType(&ttnpb.MACCommand_BeaconFreqAns{}),
+	)()
+	EvtReceiveBeaconFreqAccept = defineReceiveMACAcceptEvent(
+		"beacon_freq", "beacon frequency change",
+		events.WithDataType(&ttnpb.MACCommand_BeaconFreqAns{}),
+	)()
+)
+
+func DeviceNeedsBeaconFreqReq(dev *ttnpb.EndDevice) bool {
+	if dev.GetMulticast() || dev.GetMacState() == nil {
+		return false
+	}
+	desiredParameters, currentParameters := dev.MacState.DesiredParameters, dev.MacState.CurrentParameters
+	return desiredParameters.BeaconFrequency != currentParameters.BeaconFrequency
+}
+
+func EnqueueBeaconFreqReq(ctx context.Context, dev *ttnpb.EndDevice, maxDownLen, maxUpLen uint16) EnqueueState {
+	if !DeviceNeedsBeaconFreqReq(dev) {
+		return EnqueueState{
+			MaxDownLen: maxDownLen,
+			MaxUpLen:   maxUpLen,
+			Ok:         true,
+		}
+	}
+
+	var st EnqueueState
+	dev.MacState.PendingRequests, st = enqueueMACCommand(ttnpb.MACCommandIdentifier_CID_BEACON_FREQ, maxDownLen, maxUpLen, func(nDown, nUp uint16) ([]*ttnpb.MACCommand, uint16, events.Builders, bool) {
+		if nDown < 1 || nUp < 1 {
+			return nil, 0, nil, false
+		}
+
+		req := &ttnpb.MACCommand_BeaconFreqReq{
+			Frequency: dev.MacState.DesiredParameters.BeaconFrequency,
+		}
+		log.FromContext(ctx).WithFields(log.Fields(
+			"frequency", req.Frequency,
+		)).Debug("Enqueued BeaconFreqReq")
+		return []*ttnpb.MACCommand{
+				req.MACCommand(),
+			},
+			1,
+			events.Builders{
+				EvtEnqueueBeaconFreqRequest.With(events.WithData(req)),
+			},
+			true
+	}, dev.MacState.PendingRequests...)
+	return st
+}
+
+func HandleBeaconFreqAns(ctx context.Context, dev *ttnpb.EndDevice, pld *ttnpb.MACCommand_BeaconFreqAns) (events.Builders, error) {
+	if pld == nil {
+		return nil, ErrNoPayload.New()
+	}
+
+	ev := EvtReceiveBeaconFreqAccept
+	if !pld.FrequencyAck {
+		ev = EvtReceiveBeaconFreqReject
+	}
+
+	var err error
+	dev.MacState.PendingRequests, err = handleMACResponse(
+		ttnpb.MACCommandIdentifier_CID_BEACON_FREQ,
+		false,
+		func(cmd *ttnpb.MACCommand) error {
+			if !pld.FrequencyAck {
+				return nil
+			}
+			req := cmd.GetBeaconFreqReq()
+
+			dev.MacState.CurrentParameters.BeaconFrequency = req.Frequency
+			return nil
+		},
+		dev.MacState.PendingRequests...,
+	)
+	return events.Builders{
+		ev.With(events.WithData(pld)),
+	}, err
+}

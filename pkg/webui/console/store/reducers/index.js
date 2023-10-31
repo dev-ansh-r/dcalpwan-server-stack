@@ -1,0 +1,112 @@
+
+
+import { combineReducers } from 'redux'
+
+import { APPLICATION, END_DEVICE, GATEWAY, USER, ORGANIZATION } from '@console/constants/entities'
+
+import {
+  getUserId,
+  getApplicationId,
+  getGatewayId,
+  getOrganizationId,
+  getCombinedDeviceId,
+  getApiKeyId,
+  getCollaboratorId,
+  getPacketBrokerNetworkId,
+} from '@ttn-lw/lib/selectors/id'
+import { createNamedPaginationReducer } from '@ttn-lw/lib/store/reducers/pagination'
+import fetching from '@ttn-lw/lib/store/reducers/ui/fetching'
+import error from '@ttn-lw/lib/store/reducers/ui/error'
+import status from '@ttn-lw/lib/store/reducers/status'
+import init from '@ttn-lw/lib/store/reducers/init'
+import collaborators from '@ttn-lw/lib/store/reducers/collaborators'
+import searchAccounts from '@ttn-lw/lib/store/reducers/search-accounts'
+import { SHARED_NAME as COLLABORATORS_SHARED_NAME } from '@ttn-lw/lib/store/actions/collaborators'
+
+import { SHARED_NAME as API_KEYS_SHARED_NAME } from '@console/store/actions/api-keys'
+import { SHARED_NAME as PACKET_BROKER_NETWORKS_SHARED_NAME } from '@console/store/actions/packet-broker'
+
+import user from './logout'
+import users from './users'
+import applications from './applications'
+import devices from './devices'
+import gateways from './gateways'
+import configuration from './configuration'
+import apiKeys from './api-keys'
+import createNamedRightsReducer from './rights'
+import createNamedEventsReducer from './events'
+import link from './link'
+import webhooks from './webhooks'
+import webhookFormats from './webhook-formats'
+import webhookTemplates from './webhook-templates'
+import pubsubs from './pubsubs'
+import pubsubFormats from './pubsub-formats'
+import applicationPackages from './application-packages'
+import deviceTemplateFormats from './device-template-formats'
+import organizations from './organizations'
+import js from './join-server'
+import gatewayStatus from './gateway-status'
+import is from './identity-server'
+import as from './application-server'
+import deviceRepository from './device-repository'
+import packetBroker from './packet-broker'
+import ns from './network-server'
+
+export default combineReducers({
+  user,
+  users,
+  init,
+  status,
+  collaborators,
+  applications,
+  link,
+  devices,
+  gateways,
+  webhooks,
+  webhookFormats,
+  webhookTemplates,
+  deviceTemplateFormats,
+  pubsubs,
+  pubsubFormats,
+  applicationPackages,
+  configuration,
+  organizations,
+  apiKeys,
+  rights: combineReducers({
+    applications: createNamedRightsReducer(APPLICATION),
+    gateways: createNamedRightsReducer(GATEWAY),
+    organizations: createNamedRightsReducer(ORGANIZATION),
+    users: createNamedRightsReducer(USER),
+  }),
+  events: combineReducers({
+    applications: createNamedEventsReducer(APPLICATION),
+    devices: createNamedEventsReducer(END_DEVICE),
+    gateways: createNamedEventsReducer(GATEWAY),
+    organizations: createNamedEventsReducer(ORGANIZATION),
+  }),
+  ui: combineReducers({
+    fetching,
+    error,
+  }),
+  pagination: combineReducers({
+    applications: createNamedPaginationReducer(APPLICATION, getApplicationId),
+    apiKeys: createNamedPaginationReducer(API_KEYS_SHARED_NAME, getApiKeyId),
+    collaborators: createNamedPaginationReducer(COLLABORATORS_SHARED_NAME, getCollaboratorId),
+    devices: createNamedPaginationReducer(END_DEVICE, getCombinedDeviceId),
+    gateways: createNamedPaginationReducer(GATEWAY, getGatewayId),
+    organizations: createNamedPaginationReducer(ORGANIZATION, getOrganizationId),
+    users: createNamedPaginationReducer(USER, getUserId),
+    packetBrokerNetworks: createNamedPaginationReducer(
+      PACKET_BROKER_NETWORKS_SHARED_NAME,
+      getPacketBrokerNetworkId,
+    ),
+  }),
+  js,
+  gatewayStatus,
+  is,
+  as,
+  deviceRepository,
+  packetBroker,
+  ns,
+  searchAccounts,
+})

@@ -1,0 +1,128 @@
+
+
+import Yup from '@ttn-lw/lib/yup'
+import sharedMessages from '@ttn-lw/lib/shared-messages'
+import { id as deviceIdRegexp } from '@ttn-lw/lib/regexp'
+
+import {
+  attributeValidCheck,
+  attributeTooShortCheck,
+  attributeKeyTooLongCheck,
+  attributeValueTooLongCheck,
+  attributesCountCheck,
+} from '@console/lib/attributes'
+import { address as addressRegexp } from '@console/lib/regexp'
+import { parseLorawanMacVersion, generate16BytesKey } from '@console/lib/device-utils'
+
+const toUndefined = value => (!Boolean(value) ? undefined : value)
+
+const validationSchema = Yup.object()
+  .shape({
+    ids: Yup.object().shape({
+      device_id: Yup.string()
+        .matches(deviceIdRegexp, sharedMessages.validateAlphanum)
+        .min(2, Yup.passValues(sharedMessages.validateTooShort))
+        .max(36, Yup.passValues(sharedMessages.validateTooLong))
+        .required(sharedMessages.validateRequired),
+    }),
+    name: Yup.string()
+      .min(2, Yup.passValues(sharedMessages.validateTooShort))
+      .max(50, Yup.passValues(sharedMessages.validateTooLong)),
+    description: Yup.string().max(2000, Yup.passValues(sharedMessages.validateTooLong)),
+    network_server_address: Yup.string().matches(
+      addressRegexp,
+      Yup.passValues(sharedMessages.validateAddressFormat),
+    ),
+    application_server_address: Yup.string().matches(
+      addressRegexp,
+      Yup.passValues(sharedMessages.validateAddressFormat),
+    ),
+    _external_js: Yup.boolean(),
+    join_server_address: Yup.string().when(['$supportsJoin'], ([supportsJoin], schema) => {
+      if (!supportsJoin) {
+        return schema.strip()
+      }
+
+      return schema
+        .matches(addressRegexp, Yup.passValues(sharedMessages.validateAddressFormat))
+        .default('')
+    }),
+    resets_join_nonces: Yup.bool().when(
+      ['$supportsJoin', '$lorawanVersion', '_external_js'],
+      ([supportsJoin, lorawanVersion, externalJs], schema) => {
+        if (!supportsJoin || parseLorawanMacVersion(lorawanVersion) < 110) {
+          return schema.strip()
+        }
+
+        if (externalJs) {
+          return schema.transform(() => false)
+        }
+
+        return schema
+      },
+    ),
+    root_keys: Yup.object().when(
+      ['_external_js', '$lorawanVersion', '$supportsJoin'],
+      ([externalJs, version, supportsJoin], schema) => {
+        if (!supportsJoin) {
+          return schema.strip()
+        }
+
+        const keySchema = Yup.lazy(() =>
+          !externalJs
+            ? Yup.object().shape({
+                key: Yup.string()
+                  .emptyOrLength(16 * 2, Yup.passValues(sharedMessages.validateLength)) // 16 Byte hex.
+                  .transform(toUndefined)
+                  .default(generate16BytesKey),
+              })
+            : Yup.object().strip(),
+        )
+
+        if (externalJs) {
+          return schema.shape({
+            nwk_key: Yup.object().strip(),
+            app_key: Yup.object().strip(),
+          })
+        }
+
+        if (parseLorawanMacVersion(version) < 110) {
+          return schema.shape({
+            nwk_key: Yup.object().strip(),
+            app_key: keySchema,
+          })
+        }
+
+        return schema.shape({
+          nwk_key: keySchema,
+          app_key: keySchema,
+        })
+      },
+    ),
+    attributes: Yup.object()
+      .nullable()
+      .test(
+        'has no more than 10 keys',
+        sharedMessages.attributesValidateTooMany,
+        attributesCountCheck,
+      )
+      .test('has no null values', sharedMessages.attributesValidateRequired, attributeValidCheck)
+      .test(
+        'has key length longer than 2',
+        sharedMessages.attributeKeyValidateTooShort,
+        attributeTooShortCheck,
+      )
+      .test(
+        'has key length less than 36',
+        sharedMessages.attributeKeyValidateTooLong,
+        attributeKeyTooLongCheck,
+      )
+      .test(
+        'has value length less than 200',
+        sharedMessages.attributeValueValidateTooLong,
+        attributeValueTooLongCheck,
+      ),
+  })
+  .noUnknown()
+
+export default validationSchema

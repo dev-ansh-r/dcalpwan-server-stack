@@ -1,0 +1,104 @@
+package mac
+
+import (
+	"context"
+
+	"go.thethings.network/lorawan-stack/v3/pkg/events"
+	"go.thethings.network/lorawan-stack/v3/pkg/log"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+)
+
+var (
+	EvtEnqueuePingSlotChannelRequest = defineEnqueueMACRequestEvent(
+		"ping_slot_channel", "ping slot channel",
+		events.WithDataType(&ttnpb.MACCommand_PingSlotChannelReq{}),
+	)()
+	EvtReceivePingSlotChannelAccept = defineReceiveMACAcceptEvent(
+		"ping_slot_channel", "ping slot channel",
+		events.WithDataType(&ttnpb.MACCommand_PingSlotChannelAns{}),
+	)()
+	EvtReceivePingSlotChannelReject = defineReceiveMACRejectEvent(
+		"ping_slot_channel", "ping slot channel",
+		events.WithDataType(&ttnpb.MACCommand_PingSlotChannelAns{}),
+	)()
+)
+
+func DeviceNeedsPingSlotChannelReq(dev *ttnpb.EndDevice) bool {
+	if dev.GetMulticast() || dev.GetMacState() == nil {
+		return false
+	}
+	currentParameters, desiredParameters := dev.MacState.CurrentParameters, dev.MacState.DesiredParameters
+	switch {
+	case desiredParameters.PingSlotDataRateIndexValue == nil:
+		return false
+	case desiredParameters.PingSlotFrequency != currentParameters.PingSlotFrequency:
+		return true
+	case currentParameters.PingSlotDataRateIndexValue == nil,
+		desiredParameters.PingSlotDataRateIndexValue.Value != currentParameters.PingSlotDataRateIndexValue.Value:
+		return true
+	}
+	return false
+}
+
+func EnqueuePingSlotChannelReq(ctx context.Context, dev *ttnpb.EndDevice, maxDownLen, maxUpLen uint16) EnqueueState {
+	if !DeviceNeedsPingSlotChannelReq(dev) {
+		return EnqueueState{
+			MaxDownLen: maxDownLen,
+			MaxUpLen:   maxUpLen,
+			Ok:         true,
+		}
+	}
+
+	var st EnqueueState
+	dev.MacState.PendingRequests, st = enqueueMACCommand(ttnpb.MACCommandIdentifier_CID_PING_SLOT_CHANNEL, maxDownLen, maxUpLen, func(nDown, nUp uint16) ([]*ttnpb.MACCommand, uint16, events.Builders, bool) {
+		if nDown < 1 || nUp < 1 {
+			return nil, 0, nil, false
+		}
+		req := &ttnpb.MACCommand_PingSlotChannelReq{
+			Frequency:     dev.MacState.DesiredParameters.PingSlotFrequency,
+			DataRateIndex: dev.MacState.DesiredParameters.PingSlotDataRateIndexValue.Value,
+		}
+		log.FromContext(ctx).WithFields(log.Fields(
+			"frequency", req.Frequency,
+			"data_rate_index", req.DataRateIndex,
+		)).Debug("Enqueued PingSlotChannelReq")
+		return []*ttnpb.MACCommand{
+				req.MACCommand(),
+			},
+			1,
+			events.Builders{
+				EvtEnqueuePingSlotChannelRequest.With(events.WithData(req)),
+			},
+			true
+	}, dev.MacState.PendingRequests...)
+	return st
+}
+
+func HandlePingSlotChannelAns(ctx context.Context, dev *ttnpb.EndDevice, pld *ttnpb.MACCommand_PingSlotChannelAns) (events.Builders, error) {
+	if pld == nil {
+		return nil, ErrNoPayload.New()
+	}
+
+	var err error
+	dev.MacState.PendingRequests, err = handleMACResponse(
+		ttnpb.MACCommandIdentifier_CID_PING_SLOT_CHANNEL,
+		false,
+		func(cmd *ttnpb.MACCommand) error {
+			if !pld.DataRateIndexAck || !pld.FrequencyAck {
+				return nil
+			}
+			req := cmd.GetPingSlotChannelReq()
+			dev.MacState.CurrentParameters.PingSlotFrequency = req.Frequency
+			dev.MacState.CurrentParameters.PingSlotDataRateIndexValue = &ttnpb.DataRateIndexValue{Value: req.DataRateIndex}
+			return nil
+		},
+		dev.MacState.PendingRequests...,
+	)
+	ev := EvtReceivePingSlotChannelAccept
+	if !pld.DataRateIndexAck || !pld.FrequencyAck {
+		ev = EvtReceivePingSlotChannelReject
+	}
+	return events.Builders{
+		ev.With(events.WithData(pld)),
+	}, err
+}

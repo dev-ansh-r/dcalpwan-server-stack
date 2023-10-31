@@ -1,0 +1,27 @@
+name: API
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/proto.yml"
+      - "**.proto"
+      - "tools/**"
+
+jobs:
+  protos:
+    name: Generate protos
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install Go and Dependencies
+        uses: ./.github/actions/install-go-and-deps
+      - name: Build Mage
+        uses: ./.github/actions/build-mage
+      - name: Generate protos
+        run: tools/bin/mage proto:clean proto:all
+      - name: Lint protos
+        run: tools/bin/mage proto:lint
+      - name: Check for diff
+        run: tools/bin/mage git:diff

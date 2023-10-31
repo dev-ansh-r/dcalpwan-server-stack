@@ -1,0 +1,40 @@
+
+
+.container
+  display: none
+  flex-direction: column
+  justify-content: space-between
+
+ul.mobile-dropdown
+  border: none
+  position: static
+  overflow: auto
+  width: 100%
+  +media-query($bp.s)
+    li.mobileDropdownItem > a, li.mobileDropdownItem > button
+      padding: $cs.l 0
+
+  hr
+    height: 0.35rem
+    margin: 0
+
+.user-header
+  display: flex
+  justify-content: space-between
+  padding: $cs.xl $cs.l
+  align-items: center
+  border-top: 0.35rem solid $c-divider
+
+.user-icon
+  margin-right: $cs.xs
+
+.user-message
+  display: flex
+  align-items: center
+  b
+    margin-left: $cs.xxs
+
+.profile-picture-mobile
+  height: 3rem
+  width: 3rem
+  margin-right: $cs.m

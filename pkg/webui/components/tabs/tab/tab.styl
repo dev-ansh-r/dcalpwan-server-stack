@@ -1,0 +1,32 @@
+
+
+.tab
+  display: flex
+  flex-direction: column
+
+  &:not(:last-child)
+    margin-bottom: 0
+
+.tab-item
+  display: flex
+  white-space: nowrap
+  padding: $cs.m $cs.l
+  text-align: center
+  position: relative
+  cursor: pointer
+  user-select: none
+  transition: color $ad.xs
+
+  &-narrow
+    padding: $cs.s $cs.m
+
+  &-disabled
+    cursor: not-allowed
+    opacity: .4
+
+  &-default:not(.tab-item-active)
+    pseudo-border-animated(3px, $c-divider)
+
+  &-active
+    pseudo-border(3px, $c-active-blue)
+    color: $tc-active

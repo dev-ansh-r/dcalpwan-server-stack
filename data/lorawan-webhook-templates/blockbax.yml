@@ -1,0 +1,21 @@
+template-id: blockbax
+name: Blockbax
+description: Integrate with Blockbax
+logo-url: https://blockbax.com/images/logo-green.png
+info-url: https://blockbax.com/
+documentation-url: https://blockbax.com/docs/integrations/the-things-network/
+fields:
+  - id: token
+    name: Blockbax access token
+    secret: true
+  - id: endpoint
+    name: Endpoint
+    secret: false
+format: json
+headers:
+  Authorization: ApiKey {token}
+  Content-Type: application/json
+create-downlink-api-key: false
+base-url: "{+endpoint}"
+paths:
+  uplink-message: ""

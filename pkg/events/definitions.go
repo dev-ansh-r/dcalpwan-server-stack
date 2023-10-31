@@ -1,0 +1,135 @@
+package events
+
+import (
+	"context"
+	"fmt"
+	"sort"
+
+	"go.thethings.network/lorawan-stack/v3/pkg/i18n"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/protobuf/proto"
+)
+
+const i18nPrefix = "event"
+
+type definition struct {
+	name              string
+	description       string
+	dataType          proto.Message
+	propagateToParent bool
+}
+
+// Definition describes an event definition.
+type Definition interface {
+	Name() string
+	Description() string
+	DataType() proto.Message
+	PropagateToParent() bool
+}
+
+func (d *definition) Definition() Definition { return d }
+
+func (d definition) Name() string            { return d.name }
+func (d definition) Description() string     { return d.description }
+func (d definition) DataType() proto.Message { return d.dataType }
+func (d definition) PropagateToParent() bool { return d.propagateToParent }
+
+func (d *definition) With(options ...Option) Builder {
+	extended := &builder{
+		definition: d,
+	}
+	extended.options = append(extended.options, options...)
+	return extended
+}
+
+var defaultOptions = []Option{
+	WithVisibility(ttnpb.Right_RIGHT_ALL),
+}
+
+func (d *definition) New(ctx context.Context, opts ...Option) Event {
+	return d.With(defaultOptions...).New(ctx, opts...)
+}
+
+// EntityIdentifiers interface is for everything from which we can get entity identifiers.
+type EntityIdentifiers interface {
+	GetEntityIdentifiers() *ttnpb.EntityIdentifiers
+}
+
+func (d *definition) NewWithIdentifiersAndData(ctx context.Context, ids EntityIdentifiers, data any) Event {
+	return d.With(defaultOptions...).NewWithIdentifiersAndData(ctx, ids, data)
+}
+
+func (d *definition) BindData(data any) Builder {
+	return d.With(defaultOptions...).BindData(data)
+}
+
+// Definitions of registered events.
+var definitions = make(map[string]*definition)
+
+// All returns all defined events, sorted by name.
+func All() Builders {
+	type definition struct {
+		name    string
+		builder Builder
+	}
+	sorted := make([]*definition, 0, len(definitions))
+	for name, builder := range definitions {
+		sorted = append(sorted, &definition{name: name, builder: builder})
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].name < sorted[j].name
+	})
+	out := make(Builders, len(sorted))
+	for i, s := range sorted {
+		out[i] = s.builder
+	}
+	return out
+}
+
+// defineSkip registers an event and returns its definition.
+// The argument skip is the number of stack frames to ascend, with 0 identifying the caller of defineSkip.
+func defineSkip(name, description string, skip uint, opts ...Option) Builder {
+	if definitions[name] != nil {
+		panic(fmt.Errorf("Event %q already defined", name))
+	}
+	def := &definition{
+		name:        name,
+		description: description,
+	}
+	for _, opt := range opts {
+		if defOpt, ok := opt.(DefinitionOption); ok {
+			defOpt.applyToDefinition(def)
+		}
+	}
+	definitions[name] = def
+
+	i18n.Define(fmt.Sprintf("%s:%s", i18nPrefix, name), description).SetSource(1 + skip)
+	initMetrics(name)
+
+	var b Builder = def
+	if len(opts) > 0 {
+		b = b.With(opts...)
+	}
+	return b
+}
+
+// Define a registered event.
+func Define(name, description string, opts ...Option) Builder {
+	return defineSkip(name, description, 1, opts...)
+}
+
+// DefineFunc generates a function, which returns a Definition with specified name and description.
+// Most callers should be using Define - this function is only useful for helper functions.
+func DefineFunc(name, description string, opts ...Option) func() Builder {
+	return func() Builder {
+		return defineSkip(name, description, 1, opts...)
+	}
+}
+
+// GetDefinition gets the definition for an event.
+func GetDefinition(evt Event) Definition {
+	if def, ok := definitions[evt.Name()]; ok {
+		return def
+	}
+	return nil
+}

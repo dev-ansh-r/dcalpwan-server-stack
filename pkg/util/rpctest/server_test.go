@@ -1,0 +1,145 @@
+package rpctest_test
+
+import (
+	"context"
+	"net"
+	"testing"
+	"time"
+
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/errorcontext"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/rpctest"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+func TestFooBarExampleServer(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+
+	server := grpc.NewServer()
+	rpctest.RegisterFooBarServer(server, &rpctest.FooBarExampleServer{})
+
+	go server.Serve(lis)
+
+	cc, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
+	if err != nil {
+		panic(err)
+	}
+	defer cc.Close()
+
+	cli := rpctest.NewFooBarClient(cc)
+
+	t.Run("Unary", func(t *testing.T) {
+		a := assertions.New(t)
+
+		bar, err := cli.Unary(test.Context(), &rpctest.Foo{Message: "foo"})
+		a.So(err, should.BeNil)
+		a.So(bar.Message, should.Equal, "foofoo")
+	})
+
+	t.Run("ClientStream", func(t *testing.T) {
+		a := assertions.New(t)
+
+		{
+			stream, err := cli.ClientStream(test.Context())
+			a.So(err, should.BeNil)
+			err = stream.Send(&rpctest.Foo{Message: "foo"})
+			a.So(err, should.BeNil)
+			err = stream.Send(&rpctest.Foo{Message: "reset"})
+			a.So(err, should.BeNil)
+			bar, err := stream.CloseAndRecv()
+			a.So(err, should.BeNil)
+			a.So(bar.Message, should.Equal, "Thanks for the 1 Foo")
+		}
+
+		{
+			ctx, cancel := context.WithCancel(test.Context())
+			stream, err := cli.ClientStream(ctx)
+			a.So(err, should.BeNil)
+			err = stream.Send(&rpctest.Foo{Message: "foo"})
+			a.So(err, should.BeNil)
+			cancel()
+			err = stream.RecvMsg(&rpctest.Bar{})
+			a.So(status.Code(err), should.Equal, codes.Canceled)
+		}
+
+		{
+			stream, err := cli.ClientStream(test.Context())
+			a.So(err, should.BeNil)
+			err = stream.Send(&rpctest.Foo{Message: "foo"})
+			a.So(err, should.BeNil)
+			time.Sleep(150 * time.Millisecond)
+			err = stream.RecvMsg(&emptypb.Empty{})
+			a.So(status.Code(err), should.Equal, codes.Unknown)
+		}
+	})
+
+	t.Run("ServerStream", func(t *testing.T) {
+		a := assertions.New(t)
+
+		ctx, cancel := context.WithCancel(test.Context())
+		stream, err := cli.ServerStream(ctx, &rpctest.Foo{Message: "foo"})
+		a.So(err, should.BeNil)
+
+		bar, err := stream.Recv()
+		a.So(err, should.BeNil)
+		a.So(bar.Message, should.Equal, "foo")
+
+		bar, err = stream.Recv()
+		a.So(err, should.BeNil)
+		a.So(bar.Message, should.Equal, "foo")
+
+		cancel()
+		bar, err = stream.Recv()
+		status, ok := status.FromError(err)
+		a.So(ok, should.BeTrue)
+		a.So(status.Code(), should.Equal, codes.Canceled)
+	})
+
+	t.Run("BidiStream", func(t *testing.T) {
+		a := assertions.New(t)
+
+		ctx, cancel := context.WithCancel(test.Context())
+		stream, err := cli.BidiStream(ctx)
+		a.So(err, should.BeNil)
+
+		bar, err := stream.Recv()
+		a.So(err, should.BeNil)
+		a.So(bar.Message, should.Equal, "bar")
+
+		err = stream.Send(&rpctest.Foo{Message: "foo"})
+		a.So(err, should.BeNil)
+
+		bar, err = stream.Recv()
+		a.So(err, should.BeNil)
+		a.So(bar.Message, should.Equal, "foo")
+
+		cancel()
+		bar, err = stream.Recv()
+		status, ok := status.FromError(err)
+		a.So(ok, should.BeTrue)
+		a.So(status.Code(), should.Equal, codes.Canceled)
+	})
+}
+
+func watchClientStream(ctx *errorcontext.ErrorContext, stream rpctest.FooBar_ClientStreamClient) <-chan *rpctest.Bar {
+	ch := make(chan *rpctest.Bar)
+	bar := new(rpctest.Bar)
+	go func() {
+		err := stream.RecvMsg(bar)
+		if err == nil {
+			ch <- bar
+		} else {
+			ctx.Cancel(err)
+		}
+		close(ch)
+	}()
+	return ch
+}

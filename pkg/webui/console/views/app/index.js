@@ -1,0 +1,145 @@
+
+
+import React, { useCallback, useEffect } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import { Route, Routes, Outlet, createBrowserRouter, RouterProvider } from 'react-router-dom'
+import classnames from 'classnames'
+
+import { ToastContainer } from '@ttn-lw/components/toast'
+import sidebarStyle from '@ttn-lw/components/navigation/side/side.styl'
+
+import Footer from '@ttn-lw/containers/footer'
+
+import GenericNotFound from '@ttn-lw/lib/components/full-view-error/not-found'
+import IntlHelmet from '@ttn-lw/lib/components/intl-helmet'
+import ErrorView from '@ttn-lw/lib/components/error-view'
+import ScrollToTop from '@ttn-lw/lib/components/scroll-to-top'
+import WithAuth from '@ttn-lw/lib/components/with-auth'
+import FullViewError, { FullViewErrorInner } from '@ttn-lw/lib/components/full-view-error'
+
+import Header from '@console/containers/header'
+import LogBackInModal from '@console/containers/log-back-in-modal'
+
+import Overview from '@console/views/overview'
+import Applications from '@console/views/applications'
+import Gateways from '@console/views/gateways'
+import Organizations from '@console/views/organizations'
+import AdminPanel from '@console/views/admin-panel'
+import User from '@console/views/user'
+
+import { setStatusOnline } from '@ttn-lw/lib/store/actions/status'
+import { selectStatusStore } from '@ttn-lw/lib/store/selectors/status'
+import {
+  selectApplicationSiteName,
+  selectApplicationSiteTitle,
+  selectPageData,
+} from '@ttn-lw/lib/selectors/env'
+
+import {
+  selectUser,
+  selectUserFetching,
+  selectUserError,
+  selectUserRights,
+  selectUserIsAdmin,
+} from '@console/store/selectors/logout'
+
+import style from './app.styl'
+
+const errorRender = error => <FullViewError error={error} header={<Header />} />
+
+const Layout = () => {
+  const user = useSelector(selectUser)
+  const fetching = useSelector(selectUserFetching)
+  const error = useSelector(selectUserError)
+  const rights = useSelector(selectUserRights)
+  const isAdmin = useSelector(selectUserIsAdmin)
+  const siteTitle = selectApplicationSiteTitle()
+  const siteName = selectApplicationSiteName()
+
+  return (
+    <>
+      <ScrollToTop />
+      <ErrorView errorRender={errorRender}>
+        <div className={style.app}>
+          <IntlHelmet
+            titleTemplate={`%s - ${siteTitle ? `${siteTitle} - ` : ''}${siteName}`}
+            defaultTitle={siteName}
+          />
+          <div id="modal-container" />
+          <Header />
+          <main className={style.main}>
+            <WithAuth
+              user={user}
+              fetching={fetching}
+              error={error}
+              errorComponent={FullViewErrorInner}
+              rights={rights}
+              isAdmin={isAdmin}
+            >
+              <div className={classnames('breadcrumbs', style.mobileBreadcrumbs)} />
+              <div id="sidebar" className={sidebarStyle.container} />
+              <div className={style.content}>
+                <div className={classnames('breadcrumbs', style.desktopBreadcrumbs)} />
+                <div className={style.stage} id="stage">
+                  <Outlet />
+                </div>
+              </div>
+            </WithAuth>
+          </main>
+          <Footer className={style.footer} />
+        </div>
+      </ErrorView>
+    </>
+  )
+}
+const ConsoleRoot = () => {
+  const status = useSelector(selectStatusStore)
+  const pageData = selectPageData()
+  const dispatch = useDispatch()
+
+  const handleConnectionStatusChange = useCallback(
+    ({ type }) => {
+      dispatch(setStatusOnline(type === 'online'))
+    },
+    [dispatch],
+  )
+
+  useEffect(() => {
+    window.addEventListener('online', handleConnectionStatusChange)
+    window.addEventListener('offline', handleConnectionStatusChange)
+    return () => {
+      window.removeEventListener('online', handleConnectionStatusChange)
+      window.removeEventListener('offline', handleConnectionStatusChange)
+    }
+  }, [handleConnectionStatusChange])
+
+  if (pageData && pageData.error) {
+    return <FullViewError error={pageData.error} header={<Header />} />
+  }
+
+  return (
+    <React.Fragment>
+      {status.isLoginRequired && <LogBackInModal />}
+      <ToastContainer />
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index Component={Overview} />
+          <Route path="applications/*" Component={Applications} />
+          <Route path="gateways/*" Component={Gateways} />
+          <Route path="organizations/*" Component={Organizations} />
+          <Route path="admin-panel/*" Component={AdminPanel} />
+          <Route path="user/*" Component={User} />
+          <Route path="*" Component={GenericNotFound} />
+        </Route>
+      </Routes>
+    </React.Fragment>
+  )
+}
+
+const router = createBrowserRouter([{ path: '*', Component: ConsoleRoot }], {
+  basename: '/console',
+})
+
+const ConsoleApp = () => <RouterProvider router={router} />
+
+export default ConsoleApp

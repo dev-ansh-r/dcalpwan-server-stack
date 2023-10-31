@@ -1,0 +1,38 @@
+// Package fillcontext implements a gRPC middleware that fills global context into a call context.
+package fillcontext
+
+import (
+	"context"
+
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"go.thethings.network/lorawan-stack/v3/pkg/fillcontext"
+	"google.golang.org/grpc"
+)
+
+// UnaryServerInterceptor returns a new unary server interceptor that modifies the context.
+func UnaryServerInterceptor(fillers ...fillcontext.Filler) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if fillers != nil {
+			for _, fill := range fillers {
+				ctx = fill(ctx)
+			}
+		}
+		return handler(ctx, req)
+	}
+}
+
+// StreamServerInterceptor returns a new streaming server interceptor that that modifies the context.
+func StreamServerInterceptor(fillers ...fillcontext.Filler) grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if fillers != nil {
+			ctx := stream.Context()
+			for _, fill := range fillers {
+				ctx = fill(ctx)
+			}
+			wrapped := grpc_middleware.WrapServerStream(stream)
+			wrapped.WrappedContext = ctx
+			return handler(srv, wrapped)
+		}
+		return handler(srv, stream)
+	}
+}

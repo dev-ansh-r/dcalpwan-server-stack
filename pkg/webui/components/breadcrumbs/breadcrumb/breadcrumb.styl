@@ -1,0 +1,26 @@
+
+
+.link
+  one-liner()
+  text-decoration: none
+  color: $tc-subtle-gray
+  min-height: 18px
+
+  &:not(:last-child):after
+    material-icon()
+    margin: 0 $cs.xxs
+    content: 'keyboard_arrow_right'
+    color: $tc-subtle-gray
+
+  +focus-visible()
+    text-decoration: underline
+    color: $tc-deep-gray
+
+
+.last
+  one-liner()
+  color: $tc-deep-gray
+  min-height: 18px
+  +media-query($bp.s)
+    &:last-child
+      padding-right: $ls.xxs

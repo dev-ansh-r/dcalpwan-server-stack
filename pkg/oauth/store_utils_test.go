@@ -1,0 +1,148 @@
+package oauth_test
+
+import (
+	"context"
+
+	"go.thethings.network/lorawan-stack/v3/pkg/identityserver/store"
+	oauth_store "go.thethings.network/lorawan-stack/v3/pkg/oauth/store"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+)
+
+type mockStoreContents struct {
+	calls []string
+	req   struct {
+		ctx               context.Context
+		fieldMask         store.FieldMask
+		session           *ttnpb.UserSession
+		sessionID         string
+		userIDs           *ttnpb.UserIdentifiers
+		clientIDs         *ttnpb.ClientIdentifiers
+		authorization     *ttnpb.OAuthClientAuthorization
+		authorizationCode *ttnpb.OAuthAuthorizationCode
+		code              string
+		token             *ttnpb.OAuthAccessToken
+		previousID        string
+		tokenID           string
+	}
+	res struct {
+		session           *ttnpb.UserSession
+		user              *ttnpb.User
+		client            *ttnpb.Client
+		authorization     *ttnpb.OAuthClientAuthorization
+		authorizationCode *ttnpb.OAuthAuthorizationCode
+		accessToken       *ttnpb.OAuthAccessToken
+	}
+	err struct {
+		getUser                 error
+		getSession              error
+		deleteSession           error
+		getClient               error
+		getAuthorization        error
+		authorize               error
+		createAuthorizationCode error
+		getAuthorizationCode    error
+		deleteAuthorizationCode error
+		createAccessToken       error
+		getAccessToken          error
+		deleteAccessToken       error
+	}
+}
+
+type mockStore struct {
+	store.UserStore
+	store.UserSessionStore
+	store.ClientStore
+	store.OAuthStore
+
+	mockStoreContents
+}
+
+func (s *mockStore) reset() {
+	s.mockStoreContents = mockStoreContents{}
+}
+
+var (
+	mockErrUnauthenticated = grpc.Errorf(codes.Unauthenticated, "Unauthenticated")
+	mockErrNotFound        = grpc.Errorf(codes.NotFound, "NotFound")
+)
+
+func (s *mockStore) GetUser(ctx context.Context, id *ttnpb.UserIdentifiers, fieldMask store.FieldMask) (*ttnpb.User, error) {
+	s.req.ctx, s.req.userIDs, s.req.fieldMask = ctx, id, fieldMask
+	s.calls = append(s.calls, "GetUser")
+	return s.res.user, s.err.getUser
+}
+
+func (s *mockStore) GetSession(ctx context.Context, userIDs *ttnpb.UserIdentifiers, sessionID string) (*ttnpb.UserSession, error) {
+	s.req.ctx, s.req.userIDs, s.req.sessionID = ctx, userIDs, sessionID
+	s.calls = append(s.calls, "GetSession")
+	return s.res.session, s.err.getSession
+}
+
+func (s *mockStore) DeleteSession(ctx context.Context, userIDs *ttnpb.UserIdentifiers, sessionID string) error {
+	s.req.ctx, s.req.userIDs, s.req.sessionID = ctx, userIDs, sessionID
+	s.calls = append(s.calls, "DeleteSession")
+	return s.err.deleteSession
+}
+
+func (s *mockStore) GetClient(ctx context.Context, id *ttnpb.ClientIdentifiers, fieldMask store.FieldMask) (*ttnpb.Client, error) {
+	s.req.ctx, s.req.clientIDs, s.req.fieldMask = ctx, id, fieldMask
+	s.calls = append(s.calls, "GetClient")
+	return s.res.client, s.err.getClient
+}
+
+func (s *mockStore) GetAuthorization(ctx context.Context, userIDs *ttnpb.UserIdentifiers, clientIDs *ttnpb.ClientIdentifiers) (*ttnpb.OAuthClientAuthorization, error) {
+	s.req.ctx, s.req.userIDs, s.req.clientIDs = ctx, userIDs, clientIDs
+	s.calls = append(s.calls, "GetAuthorization")
+	return s.res.authorization, s.err.getAuthorization
+}
+
+func (s *mockStore) Authorize(ctx context.Context, req *ttnpb.OAuthClientAuthorization) (authorization *ttnpb.OAuthClientAuthorization, err error) {
+	s.req.ctx, s.req.authorization = ctx, req
+	s.calls = append(s.calls, "Authorize")
+	return s.res.authorization, s.err.authorize
+}
+
+func (s *mockStore) CreateAuthorizationCode(ctx context.Context, code *ttnpb.OAuthAuthorizationCode) (*ttnpb.OAuthAuthorizationCode, error) {
+	s.req.ctx, s.req.authorizationCode = ctx, code
+	s.calls = append(s.calls, "CreateAuthorizationCode")
+	return s.res.authorizationCode, s.err.createAuthorizationCode
+}
+
+func (s *mockStore) GetAuthorizationCode(ctx context.Context, code string) (*ttnpb.OAuthAuthorizationCode, error) {
+	s.req.ctx, s.req.code = ctx, code
+	s.calls = append(s.calls, "GetAuthorizationCode")
+	return s.res.authorizationCode, s.err.getAuthorizationCode
+}
+
+func (s *mockStore) DeleteAuthorizationCode(ctx context.Context, code string) error {
+	s.req.ctx, s.req.code = ctx, code
+	s.calls = append(s.calls, "DeleteAuthorizationCode")
+	return s.err.deleteAuthorizationCode
+}
+
+func (s *mockStore) CreateAccessToken(ctx context.Context, token *ttnpb.OAuthAccessToken, previousID string) (*ttnpb.OAuthAccessToken, error) {
+	s.req.ctx, s.req.token, s.req.previousID = ctx, token, previousID
+	s.calls = append(s.calls, "CreateAccessToken")
+	return s.res.accessToken, s.err.createAccessToken
+}
+
+func (s *mockStore) GetAccessToken(ctx context.Context, tokenID string) (*ttnpb.OAuthAccessToken, error) {
+	s.req.ctx, s.req.tokenID = ctx, tokenID
+	s.calls = append(s.calls, "GetAccessToken")
+	return s.res.accessToken, s.err.getAccessToken
+}
+
+func (s *mockStore) DeleteAccessToken(ctx context.Context, tokenID string) error {
+	s.req.ctx = ctx
+	if tokenID != "" {
+		s.req.tokenID = tokenID
+	}
+	s.calls = append(s.calls, "DeleteAccessToken")
+	return s.err.deleteAccessToken
+}
+
+func (s *mockStore) Transact(ctx context.Context, f func(context.Context, oauth_store.Interface) error) error {
+	return f(ctx, s)
+}

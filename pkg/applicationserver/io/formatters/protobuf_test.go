@@ -1,0 +1,183 @@
+package formatters_test
+
+import (
+	"strconv"
+	"testing"
+
+	"github.com/smarty/assertions"
+	"go.thethings.network/lorawan-stack/v3/pkg/applicationserver/io/formatters"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/test/assertions/should"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
+)
+
+func TestProtobufUpstream(t *testing.T) {
+	formatter := formatters.Protobuf
+
+	for i, tc := range []struct {
+		Message *ttnpb.ApplicationUp
+		Result  string
+	}{
+		{
+			Message: &ttnpb.ApplicationUp{
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{
+						ApplicationId: "foo-app",
+					},
+					DeviceId: "foo-device",
+				},
+				Up: &ttnpb.ApplicationUp_UplinkMessage{
+					UplinkMessage: &ttnpb.ApplicationUplink{
+						SessionKeyId: []byte{0x11, 0x22, 0x33, 0x44},
+						FPort:        42,
+						FCnt:         42,
+						FrmPayload:   []byte{0x1, 0x2, 0x3},
+						DecodedPayload: &structpb.Struct{
+							Fields: map[string]*structpb.Value{
+								"test_key": {
+									Kind: &structpb.Value_NumberValue{
+										NumberValue: 42,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Message: &ttnpb.ApplicationUp{
+				EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+					ApplicationIds: &ttnpb.ApplicationIdentifiers{
+						ApplicationId: "foo-app",
+					},
+					DeviceId: "foo-device",
+				},
+				Up: &ttnpb.ApplicationUp_JoinAccept{
+					JoinAccept: &ttnpb.ApplicationJoinAccept{
+						SessionKeyId:   []byte{0x11, 0x22, 0x33, 0x44},
+						PendingSession: false,
+					},
+				},
+			},
+		},
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			a := assertions.New(t)
+			actual, err := formatter.FromUp(tc.Message)
+			if !a.So(err, should.BeNil) {
+				t.FailNow()
+			}
+			expected, err := proto.Marshal(tc.Message)
+			if !a.So(err, should.BeNil) {
+				t.FailNow()
+			}
+			a.So(actual, should.Resemble, expected)
+		})
+	}
+}
+
+func TestProtobufDownstream(t *testing.T) {
+	formatter := formatters.Protobuf
+
+	t.Run("Downlinks", func(t *testing.T) {
+		for i, tc := range []struct {
+			Input          []byte
+			Items          *ttnpb.ApplicationDownlinks
+			ErrorAssertion func(*testing.T, error) bool
+		}{
+			{
+				Input: []byte(`garbage`),
+				ErrorAssertion: func(t *testing.T, err error) bool {
+					return assertions.New(t).So(err, should.NotBeNil)
+				},
+			},
+			{
+				Items: &ttnpb.ApplicationDownlinks{
+					Downlinks: []*ttnpb.ApplicationDownlink{
+						{
+							FPort:      42,
+							FrmPayload: []byte{0x1, 0x1, 0x1},
+							Confirmed:  true,
+						},
+						{
+							FPort:      42,
+							FrmPayload: []byte{0x2, 0x2, 0x2},
+							Confirmed:  true,
+						},
+					},
+				},
+			},
+		} {
+			t.Run(strconv.Itoa(i), func(t *testing.T) {
+				a := assertions.New(t)
+				input := tc.Input
+				if input == nil {
+					var err error
+					if input, err = proto.Marshal(tc.Items); !a.So(err, should.BeNil) {
+						t.FailNow()
+					}
+				}
+				res, err := formatter.ToDownlinks(input)
+				if tc.ErrorAssertion != nil && !tc.ErrorAssertion(t, err) || tc.ErrorAssertion == nil && !a.So(err, should.BeNil) {
+					t.FailNow()
+				}
+				a.So(res, should.Resemble, tc.Items)
+			})
+		}
+	})
+
+	t.Run("DownlinkQueueRequest", func(t *testing.T) {
+		for i, tc := range []struct {
+			Input          []byte
+			Request        *ttnpb.DownlinkQueueRequest
+			ErrorAssertion func(*testing.T, error) bool
+		}{
+			{
+				Input: []byte(`garbage`),
+				ErrorAssertion: func(t *testing.T, err error) bool {
+					return assertions.New(t).So(err, should.NotBeNil)
+				},
+			},
+			{
+				Request: &ttnpb.DownlinkQueueRequest{
+					EndDeviceIds: &ttnpb.EndDeviceIdentifiers{
+						ApplicationIds: &ttnpb.ApplicationIdentifiers{
+							ApplicationId: "foo-app",
+						},
+						DeviceId: "foo-device",
+					},
+					Downlinks: []*ttnpb.ApplicationDownlink{
+						{
+							FPort:      42,
+							FrmPayload: []byte{0x1, 0x1, 0x1},
+							Confirmed:  true,
+						},
+						{
+							FPort:      42,
+							FrmPayload: []byte{0x2, 0x2, 0x2},
+							Confirmed:  true,
+						},
+					},
+				},
+			},
+		} {
+			t.Run(strconv.Itoa(i), func(t *testing.T) {
+				a := assertions.New(t)
+				input := tc.Input
+				if input == nil {
+					var err error
+					if input, err = proto.Marshal(tc.Request); !a.So(err, should.BeNil) {
+						t.FailNow()
+					}
+				}
+				res, err := formatter.ToDownlinkQueueRequest(input)
+				if tc.ErrorAssertion != nil && !tc.ErrorAssertion(t, err) || tc.ErrorAssertion == nil && !a.So(err, should.BeNil) {
+					t.FailNow()
+				}
+				a.So(res, should.Resemble, tc.Request)
+			})
+		}
+	})
+}

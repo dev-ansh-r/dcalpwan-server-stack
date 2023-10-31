@@ -1,0 +1,17 @@
+
+
+.group
+  display: flex
+  flex-direction: column
+  flex-wrap: wrap
+
+  &:not(.horizontal)
+    .group-checkbox:not(:last-child)
+      margin-bottom: $cs.xs
+
+  &.horizontal
+    flex-direction: row
+    align-items: center
+
+    .group-checkbox:not(:last-child)
+      margin-right: $cs.l

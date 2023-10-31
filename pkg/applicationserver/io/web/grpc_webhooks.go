@@ -1,0 +1,122 @@
+package web
+
+import (
+	"context"
+	"strconv"
+
+	"go.thethings.network/lorawan-stack/v3/pkg/auth/rights"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+func setTotalHeader(ctx context.Context, total uint64) {
+	grpc.SetHeader(ctx, metadata.Pairs("x-total-count", strconv.FormatUint(total, 10)))
+}
+
+// appendImplicitWebhookGetPaths appends implicit ttnpb.ApplicationWebhook get paths to paths.
+func appendImplicitWebhookGetPaths(paths ...string) []string {
+	return append(append(make([]string, 0, 2+len(paths)),
+		"base_url",
+		"format",
+	), paths...)
+}
+
+type webhookRegistryRPC struct {
+	ttnpb.UnimplementedApplicationWebhookRegistryServer
+
+	webhooks  WebhookRegistry
+	templates TemplateStore
+}
+
+// NewWebhookRegistryRPC returns a new webhook registry gRPC server.
+func NewWebhookRegistryRPC(webhooks WebhookRegistry, templates TemplateStore) ttnpb.ApplicationWebhookRegistryServer {
+	return &webhookRegistryRPC{
+		webhooks:  webhooks,
+		templates: templates,
+	}
+}
+
+func (s webhookRegistryRPC) GetFormats(ctx context.Context, _ *emptypb.Empty) (*ttnpb.ApplicationWebhookFormats, error) {
+	fs := make(map[string]string, len(formats))
+	for key, val := range formats {
+		fs[key] = val.Name
+	}
+	return &ttnpb.ApplicationWebhookFormats{
+		Formats: fs,
+	}, nil
+}
+
+func (s webhookRegistryRPC) GetTemplate(ctx context.Context, req *ttnpb.GetApplicationWebhookTemplateRequest) (*ttnpb.ApplicationWebhookTemplate, error) {
+	return s.templates.GetTemplate(ctx, req)
+}
+
+func (s webhookRegistryRPC) ListTemplates(ctx context.Context, req *ttnpb.ListApplicationWebhookTemplatesRequest) (*ttnpb.ApplicationWebhookTemplates, error) {
+	return s.templates.ListTemplates(ctx, req)
+}
+
+func (s webhookRegistryRPC) Get(ctx context.Context, req *ttnpb.GetApplicationWebhookRequest) (*ttnpb.ApplicationWebhook, error) {
+	if err := rights.RequireApplication(ctx, req.Ids.ApplicationIds, ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ); err != nil {
+		return nil, err
+	}
+	return s.webhooks.Get(ctx, req.Ids, appendImplicitWebhookGetPaths(req.FieldMask.GetPaths()...))
+}
+
+func (s webhookRegistryRPC) List(ctx context.Context, req *ttnpb.ListApplicationWebhooksRequest) (*ttnpb.ApplicationWebhooks, error) {
+	if err := rights.RequireApplication(ctx, req.ApplicationIds, ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ); err != nil {
+		return nil, err
+	}
+	webhooks, err := s.webhooks.List(ctx, req.ApplicationIds, appendImplicitWebhookGetPaths(req.FieldMask.GetPaths()...))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err == nil {
+			setTotalHeader(ctx, uint64(len(webhooks)))
+		}
+	}()
+	return &ttnpb.ApplicationWebhooks{
+		Webhooks: webhooks,
+	}, nil
+}
+
+func (s webhookRegistryRPC) Set(ctx context.Context, req *ttnpb.SetApplicationWebhookRequest) (*ttnpb.ApplicationWebhook, error) {
+	if err := rights.RequireApplication(ctx, req.Webhook.Ids.ApplicationIds,
+		ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
+	); err != nil {
+		return nil, err
+	}
+	return s.webhooks.Set(ctx, req.Webhook.Ids, appendImplicitWebhookGetPaths(req.FieldMask.GetPaths()...),
+		func(webhook *ttnpb.ApplicationWebhook) (*ttnpb.ApplicationWebhook, []string, error) {
+			if webhook != nil {
+				return req.Webhook, req.FieldMask.GetPaths(), nil
+			}
+			return req.Webhook, append(req.FieldMask.GetPaths(),
+				"ids.application_ids",
+				"ids.webhook_id",
+			), nil
+		},
+	)
+}
+
+func (s webhookRegistryRPC) Delete(ctx context.Context, req *ttnpb.ApplicationWebhookIdentifiers) (*emptypb.Empty, error) {
+	if err := rights.RequireApplication(ctx, req.ApplicationIds,
+		ttnpb.Right_RIGHT_APPLICATION_SETTINGS_BASIC,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_READ,
+		ttnpb.Right_RIGHT_APPLICATION_TRAFFIC_DOWN_WRITE,
+	); err != nil {
+		return nil, err
+	}
+	_, err := s.webhooks.Set(ctx, req, nil,
+		func(webhook *ttnpb.ApplicationWebhook) (*ttnpb.ApplicationWebhook, []string, error) {
+			return nil, nil, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return ttnpb.Empty, nil
+}

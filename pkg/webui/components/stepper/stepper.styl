@@ -1,0 +1,21 @@
+
+
+.stepper
+  list-style: none
+  padding: $cs.m 0
+  margin: 0
+  display: flex
+  justify-content: space-between
+
+  &.vertical
+    display: block
+
+  li
+    flex: 1
+
+    &:last-child
+      flex: none
+
++media-query($bp.xs)
+  .stepper
+    display: block

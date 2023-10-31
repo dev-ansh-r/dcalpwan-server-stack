@@ -1,0 +1,16 @@
+template-id: akenza
+name: akenza
+description: Integrate with akenza
+logo-url: https://cdn.prod.akenza.io/images/logo/akenza-io-logo.svg
+info-url: https://app.akenza.io/
+documentation-url: https://docs.akenza.io/get-started/your-integration/the-things-network
+fields:
+  - id: uplink_secret
+    name: Uplink Secret
+    description: Akenza uplink secret
+    secret: true
+format: json
+create-downlink-api-key: false
+base-url: https://data-gateway.akenza.io
+paths:
+  uplink-message: /v3/capture?secret={uplink_secret}

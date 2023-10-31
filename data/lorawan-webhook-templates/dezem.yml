@@ -1,0 +1,25 @@
+template-id: dezem
+name: deZem
+description: Integrate with the deZem data platform
+logo-url: https://www.dezem.de/typo3conf/ext/dezem/Resources/Public/Images/logo-dezem.svg
+info-url: https://www.dezem.de
+documentation-url: https://www.dezem.de/datenerfassung/lorawan/
+fields:
+  - id: api_key
+    name: deZemAd API key
+    description: The same API key as provided in deZemAd
+    secret: false
+format: json
+headers:
+  X-deZem-Secret: "{api_key}"
+create-downlink-api-key: false
+base-url: https://m2m.dezem.de/services/import/lorawan/data-1.php
+paths:
+  uplink-message: /
+field-mask:
+  - end_device_ids.dev_eui
+  - received_at
+  - up.uplink_message.decoded_payload
+  - up.uplink_message.rx_metadata
+  - up.uplink_message.settings.data_rate.modulation.lora.spreading_factor
+  - up.uplink_message.frm_payload

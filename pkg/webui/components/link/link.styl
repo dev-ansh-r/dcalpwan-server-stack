@@ -1,0 +1,46 @@
+
+
+.link
+  white-space: nowrap
+
+  &:not(.primary):not(.secondary)
+    text-decoration: none
+
+  &.primary
+    color: $c-active-blue
+
+    &:active,
+    &:hover
+      color: $c-active-blue-hover
+      text-decoration: underline
+
+    &.link-visited
+      &:visited
+        color: $c-active-blue-active
+
+  &.secondary
+    color: $tc-subtle-gray
+    &:active,
+    &:hover
+      color: $tc-deep-gray
+
+    &.link-visited
+      &:visited
+        color: $tc-deep-gray
+
+  &.primary, &.secondary
+    &.disabled
+      opacity: .5
+      cursor: not-allowed
+
+.doc-link
+  white-space: nowrap
+
+.icon
+  nudge('up', 2px)
+  margin-left: .11rem
+  margin-right: .1rem
+  font-size: 0.9rem
+
+.doc-icon
+  nudge('up')

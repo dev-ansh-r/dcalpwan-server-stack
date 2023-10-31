@@ -1,0 +1,102 @@
+package commands
+
+import (
+	"fmt"
+	stdio "io"
+	"net"
+	"net/url"
+	"strings"
+
+	"github.com/spf13/pflag"
+	"go.thethings.network/lorawan-stack/v3/cmd/ttn-lw-cli/internal/util"
+	"go.thethings.network/lorawan-stack/v3/pkg/errors"
+	"go.thethings.network/lorawan-stack/v3/pkg/ttnpb"
+	"go.thethings.network/lorawan-stack/v3/pkg/util/io"
+)
+
+func getHost(address string) string {
+	if strings.Contains(address, "://") {
+		url, err := url.Parse(address)
+		if err == nil {
+			address = url.Host
+		}
+	}
+	if strings.Contains(address, ":") {
+		host, _, err := net.SplitHostPort(address)
+		if err == nil {
+			return host
+		}
+	}
+	return address
+}
+
+func getHosts(addresses ...string) []string {
+	hostmap := make(map[string]struct{})
+	for _, address := range addresses {
+		hostmap[getHost(address)] = struct{}{}
+	}
+	hosts := make([]string, 0, len(hostmap))
+	for host := range hostmap {
+		hosts = append(hosts, host)
+	}
+	return hosts
+}
+
+func getInputDecoder(reader stdio.Reader) (io.Decoder, error) {
+	switch config.InputFormat {
+	case "json":
+		return io.NewJSONDecoder(reader), nil
+	case "hex":
+		return io.NewHexDecoder(reader), nil
+	case "base64":
+		return io.NewBase64Decoder(reader), nil
+	default:
+		return nil, fmt.Errorf("unknown input format: %s", config.InputFormat)
+	}
+}
+
+func payloadFormatterParameterFlags(prefix string) *pflag.FlagSet {
+	flagSet := &pflag.FlagSet{}
+	flagSet.AddFlagSet(dataFlags(prefix+".down-formatter-parameter", ""))
+	flagSet.AddFlagSet(dataFlags(prefix+".up-formatter-parameter", ""))
+	return flagSet
+}
+
+// parsePayloadFormatterParameterFlags parses formatter-parameter-local-file arguments,
+// updates formatters with the file contents and returns the extra field mask paths.
+func parsePayloadFormatterParameterFlags(prefix string, formatters *ttnpb.MessagePayloadFormatters, flags *pflag.FlagSet) ([]string, error) {
+	if formatters == nil {
+		return nil, nil
+	}
+	paths := []string{}
+	r, err := getDataReader(prefix+".up-formatter-parameter", flags)
+	switch err {
+	case nil:
+		b, err := stdio.ReadAll(r)
+		if err != nil {
+			return nil, err
+		}
+		formatters.UpFormatterParameter = string(b)
+		paths = append(paths, prefix+".up-formatter-parameter")
+	default:
+		if !errors.IsInvalidArgument(err) {
+			return nil, err
+		}
+	}
+
+	r, err = getDataReader(prefix+".down-formatter-parameter", flags)
+	switch err {
+	case nil:
+		b, err := stdio.ReadAll(r)
+		if err != nil {
+			return nil, err
+		}
+		formatters.DownFormatterParameter = string(b)
+		paths = append(paths, prefix+".down-formatter-parameter")
+	default:
+		if !errors.IsInvalidArgument(err) {
+			return nil, err
+		}
+	}
+	return util.NormalizePaths(paths), nil
+}

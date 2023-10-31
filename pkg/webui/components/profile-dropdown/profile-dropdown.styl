@@ -1,0 +1,37 @@
+
+
+.container
+  display: inline-flex
+  align-items: center
+  position: relative
+  cursor: pointer
+  transition: background-color $ad.s
+  height: 100%
+  padding: 0 $cs.xl
+
+  &:hover
+    area-hover()
+
+  +focus-visible()
+    background-color: $c-backdrop-lighter
+
+  &:active, &:focus
+    area-active()
+
+.id
+  one-liner()
+  margin-right: $cs.xs
+
+  +media-query($bp.l)
+    display: none
+
+.dropdown
+  top: $header-height
+
+  &-icon
+    margin-right: -.4rem
+
+.profile-picture
+  height: 3rem
+  width: 3rem
+  margin-right: $cs.m
