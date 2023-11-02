@@ -1,4 +1,4 @@
-// ttn-lw-stack is the binary that runs the entire The Things Stack for LoRaWAN.
+
 package main
 
 import (

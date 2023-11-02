@@ -1,3 +1,4 @@
+
 import React from 'react'
 import { defineMessages } from 'react-intl'
 
@@ -11,18 +12,21 @@ import PropTypes from '@ttn-lw/lib/prop-types'
 import style from './overview.styl'
 
 const m = defineMessages({
-  needHelp: 'Need help? Have a look at our {documentationLink} or {supportLink}.',
-  needHelpShort: 'Need help? Have a look at our {link}.',
+  needHelp: 'Need help? Have a look at {githubRepositoryLink}.',
+  needHelpShort: 'Check github documentation for support.',
 })
 
 const HelpLink = ({ supportLink, documentationLink }) => {
   if (!supportLink && !documentationLink) return null
 
+  const githubRepositoryLink = "https://github.com/yourusername/yourrepository"; // Replace with your GitHub repository URL
+
   const documentation = (
-    <Link.DocLink secondary path="/" title={sharedMessages.documentation}>
-      <Message content={sharedMessages.documentation} />
-    </Link.DocLink>
-  )
+    <a href={githubRepositoryLink} target="_blank" rel="noopener noreferrer">
+      GitHub Repository
+    </a>
+  );
+  
 
   const support = (
     <Link.Anchor secondary href={supportLink || ''} external>

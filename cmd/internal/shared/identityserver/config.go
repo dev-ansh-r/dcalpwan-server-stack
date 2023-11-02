@@ -1,3 +1,4 @@
+
 package identityserver
 
 import (
@@ -12,12 +13,12 @@ import (
 
 // DefaultIdentityServerConfig is the default configuration for the Identity Server.
 var DefaultIdentityServerConfig = identityserver.Config{
-	DatabaseURI: "postgresql://root:root@localhost:5432/ttn_lorawan_dev?sslmode=disable",
+	DatabaseURI: "postgres://root:yKxvwr5POAR4@ep-green-cherry-82769755.us-east-2.aws.neon.tech/lorawan_dev?sslmode=require",
 	OAuth: oauth.Config{
 		Mount: "/oauth",
 		UI: oauth.UIConfig{
 			TemplateData: webui.TemplateData{
-				SiteName:      "The Things Stack for LoRaWAN",
+				SiteName:      "The dcalpwan Server for LoRaWAN Networks",
 				Title:         "Account",
 				Language:      "en",
 				CanonicalURL:  shared.DefaultOAuthPublicURL,
@@ -27,7 +28,7 @@ var DefaultIdentityServerConfig = identityserver.Config{
 				JSFiles:       []string{"libs.bundle.js", "account.js"},
 			},
 			FrontendConfig: oauth.FrontendConfig{
-				DocumentationBaseURL: "https://thethingsindustries.com/docs",
+				DocumentationBaseURL: "https://github.com/dev-ansh-r/lw-stack/blob/main/DEVELOPMENT.md",
 				StackConfig: oauth.StackConfig{
 					IS: webui.APIConfig{Enabled: true, BaseURL: shared.DefaultPublicURL + "/api/v3"},
 				},

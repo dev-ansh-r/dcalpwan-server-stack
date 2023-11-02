@@ -1,21 +1,4 @@
-/*
 
-Name:   catena-message-port1-format-20-decoder-ttn.js
-
-Function:
-    Decode port 0x01 format 0x20 and 0x21 messages for TTN console.
-
-Copyright and License:
-    See accompanying LICENSE file at https://github.com/mcci-catena/MCCI-Catena-PMS7003/
-
-Author:
-    Terry Moore, MCCI Corporation   July 2019
-
-*/
-
-// calculate dewpoint (degrees C) given temperature (C) and relative humidity (0..100)
-// from http://andrew.rsmas.miami.edu/bmcnoldy/Humidity.html
-// rearranged for efficiency and to deal sanely with very low (< 1%) RH
 function dewpoint(t, rh) {
   var c1 = 243.04;
   var c2 = 17.625;
