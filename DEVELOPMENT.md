@@ -1,21 +1,20 @@
-# The Things Stack for LoRaWAN Development
+# The development of dcalpan server for LoRaWAN Server.
 
-The Things Stack components are primarily built in Go, we use React for web front-ends. It is assumed that you have decent knowledge and experience with these technologies. If you want to get more familiar with Go, we strongly recommend to take [A Tour of Go](https://tour.golang.org/).
+The Stack components are primarily built in Go, we use React for web front-ends.
 
 ## Table of contents
 
 - [Development Environment](#development-environment)
 - [Cloning the Repository](#cloning-the-repository)
 - [Getting Started](#getting-started)
-- [Running a development build of The Things Stack](#running-a-development-build-of-the-things-stack)
+- [Running a development build](#running-a-development-build)
   - [Pre-requisites](#pre-requisites)
   - [Steps](#steps)
-- [Using the CLI with the Development Environment](#using-the-cli-with-the-development-environment)
 - [Managing the Development Databases](#managing-the-development-databases)
   - [PostgreSQL](#PostgreSQL)
   - [Redis](#redis)
 - [Building the Frontend](#building-the-frontend)
-- [Starting The Things Stack](#starting-the-things-stack)
+- [Starting the server](#starting-the-server)
 - [Project Structure](#project-structure)
   - [API](#api)
   - [Documentation](#documentation)
@@ -55,7 +54,7 @@ The Things Stack components are primarily built in Go, we use React for web fron
 
 ## Development Environment
 
-The Things Network's development tooling uses [Mage](https://magefile.org/). Under the hood, `mage` calls other tools such as `git`, `go`, `yarn`, `docker` etc. Recent versions are supported; Node v18.x and Go v1.18.x.
+The Network's development tooling uses [Mage](https://magefile.org/). Under the hood, `mage` calls other tools such as `git`, `go`, `yarn`, `docker` etc. Recent versions are supported; Node v18.x and Go v1.21.x.
 
 - Follow [Go's installation guide](https://golang.org/doc/install) to install Go.
 - Download Node.js [from their website](https://nodejs.org) and install it.
@@ -76,18 +75,15 @@ $ make init
 
 You may want to run this commands from time to time to stay up-to-date with changes to tooling and dependencies.
 
-## Running a development build of The Things Stack
+## Running a development build
 
-This section explains how to get a bare-bones version of The Things Stack running on your local machine. This will build whatever code is present in your local repository (along with local changes) and run in it using the default ports.
-
-If you want to just run a docker image of The Things Stack, then check the [Installation](https://thethingsstack.io/getting-started/installation/) section of the documentation.
+This section explains how to get a bare-bones version of The server running on your local machine. This will build whatever code is present in your local repository (along with local changes) and run in it using the default ports.
 
 ### Pre-requisites
 
 1. This section requires that the required tools from [Development Environment](##Development-Environment) are installed.
-2. This repository must be cloned inside the `GOPATH`. Check the [official documentation](https://golang.org/doc/gopath_code.html) on working with `GOPATH`.
-3. Make sure that you've run `$ make init` before continuing.
-4. If this is not the first time running the stack, make sure to clear any environment variables that you've been using earlier. You can do check what variables are set currently by using
+2. Make sure that you've run `$ make init` before continuing.
+3. If this is not the first time running the stack, make sure to clear any environment variables that you've been using earlier. You can do check what variables are set currently by using
 
 ```
 $ printenv | grep "TTN_LW_*"
@@ -124,13 +120,13 @@ $ tools/bin/mage dev:initStack
 This creates a database, migrates tables and creates a user `admin` with password `admin`.
 - An API Key for the admin user with `RIGHTS_ALL` is also created and stored in `.env/admin_api_key.txt`.
 
-4. Start a development instance of The Things Stack
+4. Start a development instance of the server
 
 ```bash
 $ go run ./cmd/ttn-lw-stack -c ./config/stack/ttn-lw-stack.yml start
 ```
 
-5. Login to The Things Stack via the Console
+5. Login to server via the Console
 
 In a web browser, navigate to `http://localhost:1885/` and login using credentials from step 3.
 
@@ -142,16 +138,6 @@ You can now use the modified configuration with
 
 ```bash
 $ go run ./cmd/ttn-lw-stack -c <custom-location>/ttn-lw-stack.yml start
-```
-
-## Using the CLI with the Development Environment
-
-In order to login, you will need to use the correct OAuth Server Address. `make init` uses CFSSL to generate a `ca.pem` CA certificate to support https:
-
-```bash
-$ export TTN_LW_CA=./ca.pem
-$ export TTN_LW_OAUTH_SERVER_ADDRESS=https://localhost:8885/oauth
-$ go run ./cmd/ttn-lw-cli login
 ```
 
 ## Managing the Development Databases
@@ -183,51 +169,23 @@ You can use `tools/bin/mage dev:dbRedisCli` to enter a Redis-CLI shell.
 
 You can use `tools/bin/mage js:build` to build the frontend.
 
-## Starting The Things Stack
+## Starting The server
 
-You can use `go run ./cmd/ttn-lw-stack start` to start The Things Stack.
-
-#### Codec
-
-Most data is stored as base64-encoded protocol buffers. For debugging purposes it is often useful to inspect or update the stored database models - you can use Redis codec tool located at `./pkg/redis/codec` to decode/encode them to/from JSON.
-
-##### Examples
-
-###### Get and Decode
-
-```bash
-$ redis-cli get "ttn:v3:ns:devices:uid:test-app:test-dev" | go run ./pkg/redis/codec -type 'ttnpb.EndDevice'
-```
-
-###### Get, Decode, Modify, Encode and Set
-
-```
-$ redis-cli get "ttn:v3:ns:devices:uid:test-app.test-dev" \
-  | go run ./pkg/redis/codec -type 'ttnpb.EndDevice' \
-  | jq '.supports_join = false' \
-  | go run ./pkg/redis/codec -type 'ttnpb.EndDevice' -encode \
-  | redis-cli -x set "ttn:v3:ns:devices:uid:test-app.test-dev"
-```
+You can use `go run ./cmd/ttn-lw-stack start` to start the server.
 
 ## Project Structure
-
-The folder structure of the project looks as follows:
-
 ```
 .
 ├── .editorconfig       configuration for your editor, see editorconfig.org
-├── CODEOWNERS          maintainers of folders who are required to approve pull requests
-├── CONTRIBUTING.md     guidelines for contributing: branching, commits, code style, etc.
 ├── DEVELOPMENT.md      guide for setting up your development environment
 ├── docker-compose.yml  deployment file (including databases) for Docker Compose
 ├── Dockerfile          formula for building Docker images
-├── LICENSE             the license that explains what you're allowed to do with this code
 ├── Makefile            dev/test/build tooling
 ├── tools               dev/test/build tooling
 ├── README.md           general information about this project
 │   ...
 ├── api                 contains the protocol buffer definitions for our API
-├── cmd                 contains the different binaries that form The Things Stack for LoRaWAN
+├── cmd                 contains the different binaries that form The Things Stack for LoRaWAN and our dcalpwan server.
 │   ├── internal        contains internal files shared between the different binaries
 │   │   ...
 │   ├── ttn-lw-cli      the command-line-interface for The Things Stack for LoRaWAN
@@ -255,7 +213,7 @@ The folder structure of the project looks as follows:
 
 ### API
 
-Our APIs are defined in `.proto` files in the `api` folder. These files describe the messages and interfaces of the different components of The Things Stack. If this is the first time you hear the term "protocol buffers" you should probably read the [protocol buffers documentation](https://developers.google.com/protocol-buffers/docs/proto3) before you continue.
+Our APIs are defined in `.proto` files in the `api` folder. These files describe the messages and interfaces of the different components of the Stack. If this is the first time you hear the term "protocol buffers" you should probably read the [protocol buffers documentation](https://developers.google.com/protocol-buffers/docs/proto3) before you continue.
 
 From the `.proto` files, we generate code using the `protoc` compiler. As we plan to compile to a number of different languages, we decided to put the compiler and its dependencies in a [Docker image](https://github.com/TheThingsIndustries/docker-protobuf). The actual commands for compilation are handled by our tooling, so the only thing you have to execute when updating the API, is:
 
@@ -263,13 +221,9 @@ From the `.proto` files, we generate code using the `protoc` compiler. As we pla
 $ tools/bin/mage proto:clean proto:all jsSDK:definitions
 ```
 
-### Documentation
-
-The documentation site for The Things Stack is built from the [`lorawan-stack-docs`](https://github.com/TheThingsIndustries/lorawan-stack-docs) repository.
-
 ### Web UI
 
-The Things Stack for LoRaWAN includes two frontend applications: the **Console** and **Account App**. Both applications use [React](https://reactjs.org/) as frontend framework. The `console` and `account` packages of the backend expose their respective web servers and handle all logic that cannot be done in the browser. Otherwise both applications are single page applications (SPA) that run entirely in the browser.
+The server Stack for LoRaWAN includes two frontend applications: the **Console** and **Account App**. Both applications use [React](https://reactjs.org/) as frontend framework. The `console` and `account` packages of the backend expose their respective web servers and handle all logic that cannot be done in the browser. Otherwise both applications are single page applications (SPA) that run entirely in the browser.
 
 The folder structure of the frontend looks as follows:
 
@@ -278,10 +232,7 @@ The folder structure of the frontend looks as follows:
 ├── assets            assets (eg. vectors, images) used by the frontend
 ├── components        react components shared throughout the frontend
 ├── console           root of the console application
-│   ├── api           api definitions to communicate with The Things Stack
-│   ├── containers    container components
-│   ├── lib           utility classes and functions
-│   ├── store         redux actions, reducers and logic middlewares
+│   ├── api           api definitions to communicate with middlewares
 │   ├── views         whole view components of the console (~pages)
 ├── containers        global react container components
 ├── lib               global utility classes and functions
@@ -296,7 +247,7 @@ The folder structure of the frontend looks as follows:
 ├── template.go       go template module used to render the frontend HTML
 ```
 
-For development purposes, the frontend can be run using `webpack-dev-server`. After following the [Getting Started](#getting-started) section to initialize The Things Stack and doing an initial build of the frontend via `tools/bin/mage js:build`, it can be served using:
+For development purposes, the frontend can be run using `webpack-dev-server`. After following the [Getting Started](#getting-started) section to initialize the Stack and doing an initial build of the frontend via `tools/bin/mage js:build`, it can be served using:
 
 ```bash
 $ export NODE_ENV=development
@@ -307,7 +258,7 @@ The development server runs on `http://localhost:8080` and will proxy all api ca
 
 #### Development Configuration
 
-In order to set up The Things Stack to support running the frontend via `webpack-dev-server`, the following environment setup is needed:
+In order to set up The Stack to support running the frontend via `webpack-dev-server`, the following environment setup is needed:
 
 ```bash
 # .dev.env
@@ -328,7 +279,7 @@ export TTN_LW_CONSOLE_UI_ACCOUNT_URL="http://localhost:8080/oauth"
 
 We recommend saving this configuration as an `.dev.env` file and sourcing it like `source .dev.env`. This allows you to easily apply development configuration when needed.
 
-> Note: It is important to **source these environment variables in all terminal sessions** that run The Things Stack or the `tools/bin/mage` commands. Failing to do so will result in erros such as blank page renders. See also [troubleshooting](#troubleshooting).
+> Note: It is important to **source these environment variables in all terminal sessions** that run The Things Stack or the `tools/bin/mage` commands. Failing to do so will result in erros such as blank page renders.
 
 #### Optional Configuration
 
@@ -349,7 +300,7 @@ WEBPACK_DEV_SERVER_USE_TLS="true"
 ```
 This option uses the key and certificate set via `TTN_LW_TLS_KEY` and `TTN_LW_TLS_CERTIFICATE` environment variables. Useful when developing functionalities that rely on TLS.
 
-> Note: To use this option, The Things Stack for LoRaWAN must be properly setup for TLS. You can obtain more information about this in the **Getting Started** section of the The Things Stack for LoRaWAN documentation.
+> Note: To use this option, The Stack for LoRaWAN must be properly setup for TLS. You can obtain more information about this in the **Getting Started** section of the The Things Stack for LoRaWAN documentation.
 
 ## Code Style
 

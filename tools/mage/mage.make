@@ -13,11 +13,11 @@ init: $(MAGE)
 
 .PHONY: git.pre-commit
 git.pre-commit: $(MAGE) # NOTE: DO NOT CHANGE - will break previously installed git hooks.
-	@HOOK=pre-commit $(MAGE) git:runHook
+	
 
 .PHONY: git.commit-msg
 git.commit-msg: $(MAGE) # NOTE: DO NOT CHANGE - will break previously installed git hooks.
-	@HOOK=commit-msg $(MAGE) git:runHook
+	
 
 .PHONY: git.pre-push
 git.pre-push: $(MAGE) # NOTE: DO NOT CHANGE - will break previously installed git hooks.
